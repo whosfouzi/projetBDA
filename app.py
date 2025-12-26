@@ -1,0 +1,134 @@
+import streamlit as st
+import pandas as pd
+
+st.set_page_config(page_title="Exam Scheduler", layout="wide", page_icon="🎓")
+
+def load_css():
+    try:
+        with open("assets/style.css") as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    except FileNotFoundError:
+        pass
+
+load_css()
+
+# Session State Init
+if 'user' not in st.session_state:
+    st.session_state.user = None
+
+def login_page():
+    st.markdown("""
+    <div style='text-align: center; margin-top: 50px;'>
+        <h1>🏫 Exam Scheduler</h1>
+        <p style='color: #6b7280;'>Système de gestion des examens universitaires</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        with st.form("login_form"):
+            st.subheader("Connexion")
+            st.caption("Admin: admin@univ.edu / admin")
+            st.caption("Prof: dupont@univ.edu / password123")
+            st.caption("Etudiant: e1@student.univ.edu / password123")
+            
+            email = st.text_input("Email")
+            password = st.text_input("Mot de passe", type="password")
+            submit = st.form_submit_button("Se connecter", use_container_width=True)
+            
+            if submit:
+                from backend.auth import check_login, get_user_name
+                user, err = check_login(email, password)
+                if user:
+                    st.session_state.user = user
+                    st.session_state.user_name = get_user_name(user['type_utilisateur'], user['id_professeur'], user['id_etudiant'])
+                    st.success("Connexion réussie !")
+                    st.rerun()
+                else:
+                    st.error(err)
+
+# def main_dashboard(): ... (Kept as is, but we need to call login_page now)
+
+
+# -----------------------------------------------------------------------------
+# Views Import
+# -----------------------------------------------------------------------------
+from frontend.views.dashboard import show_dashboard
+from frontend.views.generate import show_generate
+from frontend.views.timetable import show_timetable
+from frontend.views.my_exams import show_my_exams
+from frontend.views.audit import show_audit
+
+# -----------------------------------------------------------------------------
+# Navigation Logic
+# -----------------------------------------------------------------------------
+if not st.session_state.user:
+    login_page()
+else:
+    role = st.session_state.user['type_utilisateur']
+    
+    # Sidebar: User Info
+    st.sidebar.title(f"👤 {st.session_state.user_name}")
+    st.sidebar.caption(f"Role: {role.replace('_', ' ').capitalize()}")
+    if st.sidebar.button("Déconnexion"):
+        st.session_state.user = None
+        st.rerun()
+    st.sidebar.divider()
+    
+    st.sidebar.caption(f"Connecté en tant que : {role.upper()}")
+
+    # Define Permissions
+    # Label -> Function
+    menus = {}
+
+    # 1. Vice-Dean / Dean (Strategic)
+    if role == 'vice_doyen':
+        menus = {
+            "📊 Tableau de Bord": show_dashboard,
+            "📅 Planning Global": show_timetable,
+            "🛡️ Audit & Qualité": show_audit
+        }
+
+    # 2. Admin (Operational)
+    elif role == 'admin_examens':
+        menus = {
+            "📊 Tableau de Bord": show_dashboard,
+            "⚙️ Générateur": show_generate,
+            "📅 Planning Global": show_timetable,
+            "🛡️ Audit & Qualité": show_audit
+        }
+
+    # 3. Head of Dept (Validation)
+    elif role == 'chef_departement':
+        menus = {
+            "📊 Tableau de Bord": show_dashboard,
+            "📅 Planning Global": show_timetable,
+            "🛡️ Audit & Qualité": show_audit
+        }
+
+    # 4. Student / Prof (Consultation)
+    elif role in ['professeur', 'etudiant']:
+        menus = {
+            "🎓 Mes Examens": show_my_exams,
+            "📅 Planning Global": show_timetable
+        }
+
+    # Render Navigation
+    if menus:
+        selection = st.sidebar.radio("Navigation", list(menus.keys()))
+        page_func = menus[selection]
+        page_func()
+    else:
+        st.error("Aucun menu disponible pour ce rôle.")
+
+    # -----------------------------------------------------------------------------
+    # Global Tools available to Admins
+    # -----------------------------------------------------------------------------
+    if role in ['admin_examens', 'vice_doyen']:
+        st.sidebar.divider()
+        st.sidebar.subheader("Zone de Danger")
+        if st.sidebar.button("🌱 Réinitialiser Données", help="Reset DB"):
+            from backend.seed import seed_database
+            with st.spinner("Reset..."):
+                seed_database()
+                st.toast("Données réinitialisées !", icon="✅")

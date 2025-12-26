@@ -1,0 +1,168 @@
+/* Google Fonts Import - Inter */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* GLOBAL VARIABLES - Enterprise Palette */
+:root {
+    /* Brand Colors */
+    --brand-primary: #3B82F6;
+    /* Corporate Blue */
+    --brand-secondary: #0F172A;
+    /* Slate 900 */
+
+    /* Neutrals */
+    --bg-app: #F8FAFC;
+    /* Slate 50 */
+    --bg-card: #FFFFFF;
+    --text-primary: #1E293B;
+    /* Slate 800 */
+    --text-secondary: #64748B;
+    /* Slate 500 */
+    --border-color: #E2E8F0;
+    /* Slate 200 */
+
+    /* Functional */
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+}
+
+/* Base Reset */
+html,
+body,
+[class*="css"] {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+}
+
+/* --- STREAMLIT COMPONENT OVERRIDES --- */
+
+/* App Background */
+.stApp {
+    background-color: var(--bg-app);
+    background-image: none;
+    /* Remove textures */
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background-color: var(--bg-card);
+    border-right: 1px solid var(--border-color);
+}
+
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: var(--brand-secondary) !important;
+    font-weight: 600;
+}
+
+/* Headers */
+h1,
+h2,
+h3 {
+    font-family: 'Inter', sans-serif !important;
+    color: var(--brand-secondary) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em;
+    text-transform: none;
+    /* Remove uppercase */
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+h1 {
+    font-size: 2rem !important;
+}
+
+h2 {
+    font-size: 1.5rem !important;
+    margin-top: 1.5rem !important;
+}
+
+h3 {
+    font-size: 1.125rem !important;
+    color: var(--text-secondary) !important;
+}
+
+/* Metric Cards (Clean Enterprise Look) */
+[data-testid="stMetric"] {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px 24px;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: box-shadow 0.2s ease;
+}
+
+[data-testid="stMetric"]:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+[data-testid="stMetricLabel"] {
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    color: var(--text-secondary) !important;
+    text-transform: none !important;
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 1.875rem !important;
+    font-weight: 600 !important;
+    color: var(--brand-secondary) !important;
+}
+
+/* Buttons (Primary Action) */
+div.stButton>button {
+    background-color: var(--brand-primary);
+    color: white;
+    border: 1px solid var(--brand-primary);
+    border-radius: 6px;
+    /* Slightly rounded */
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    width: auto;
+    /* Default width */
+}
+
+div.stButton>button:hover {
+    background-color: #2563EB;
+    /* Darker blue */
+    border-color: #2563EB;
+    transform: none;
+    /* Remove scale */
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Inputs & Selectboxes */
+[data-baseweb="select"]>div,
+[data-baseweb="input"]>div {
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+    border-radius: 6px;
+}
+
+/* Dataframes & Tables */
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-card);
+}
+
+[data-testid="stDataFrame"] th {
+    background-color: #F1F5F9 !important;
+    /* Slate 100 */
+    color: var(--text-secondary) !important;
+    font-weight: 600 !important;
+    font-size: 0.75rem !important;
+    text-transform: uppercase;
+}
+
+/* Alerts */
+.stAlert {
+    border-radius: 6px;
+    border: 1px solid transparent;
+}
