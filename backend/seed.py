@@ -6,8 +6,13 @@ def seed_database():
     cursor = conn.cursor(buffered=True)
     
     try:
-        # 1. Clean Data
-        tables = ['surveillance', 'inscription', 'examen', 'module', 'etudiant', 'professeur', 'salle', 'formation', 'departement', 'batiment']
+        # 1. Clean Data (including cache tables)
+        tables = [
+            'cache_capacite_examens', 'etudiant_examens_jour', 'suivi_surveillances_jour',
+            'surveillance', 'inscription', 'examen', 'module', 
+            'etudiant', 'professeur', 'utilisateur',  # Clean users too!
+            'salle', 'formation', 'departement', 'batiment'
+        ]
         for t in tables:
             cursor.execute(f"DELETE FROM {t}")
         
@@ -57,20 +62,55 @@ def seed_database():
         # Default Password Hash for 'password123'
         # Generated via hashlib.sha256(b"password123").hexdigest()
         default_pw = 'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f'
+        
+        # Admin Password Hash for 'admin'
+        admin_pw = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918'
+        
+        # 6. Configuration Constraints (seed default values)
+        constraints_data = [
+            ('max_examens_etudiant_par_jour', 1, 'Maximum 1 examen par jour par étudiant'),
+            ('max_surveillances_prof_par_jour', 3, 'Maximum 3 surveillances par jour par professeur'),
+            ('duree_examen_minutes', 90, 'Durée standard d\'un examen (1h30)')
+        ]
+        for nom, valeur, desc in constraints_data:
+            cursor.execute("""
+                INSERT INTO configuration_contraintes (nom, valeur, description)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)
+            """, (nom, valeur, desc))
+        print("Configuration constraints seeded.")
+        
+        # 7. Admin User
+        cursor.execute("""
+            INSERT INTO utilisateur (email, mot_de_passe_hash, type_utilisateur, actif)
+            VALUES ('admin@univ.edu', %s, 'admin_examens', 1)
+        """, (admin_pw,))
+        print("Admin user created: admin@univ.edu / admin")
 
-        # 6. Professeurs
+        # 7. Professeurs (Algerian Names)
         prof_ids = []
-        names = ["Dupont", "Martin", "Durand", "Leroy", "Moreau", "Simon", "Laurent", "Lefevre", "Michel", "Garcia"]
-        for i, name in enumerate(names):
+        prof_data = [
+            ("Bouchenak", "Fatima"),
+            ("Khelifi", "Ahmed"),
+            ("Bensaid", "Karim"),
+            ("Benali", "Nadia"),
+            ("Mansouri", "Yacine"),
+            ("Chaouch", "Leïla"),
+            ("Zerrouki", "Mohamed"),
+            ("Saadi", "Samira"),
+            ("Taleb", "Omar"),
+            ("Abbas", "Rym")
+        ]
+        for i, (nom, prenom) in enumerate(prof_data):
             pid = i + 1
-            email = f"{name.lower()}@univ.edu"
+            email = f"{nom.lower()}@univ.edu"
             dept_id = random.choice(dept_ids)
             
             # Insert into PROFESSEUR
             cursor.execute("""
                 INSERT INTO professeur (id_professeur, nom, prenom, specialite, grade, id_departement) 
-                VALUES (%s, %s, %s, 'Generaliste', 'Maitre Conference', %s)
-            """, (pid, name, "Prof", dept_id))
+                VALUES (%s, %s, %s, 'Informatique', 'Professeur', %s)
+            """, (pid, nom, prenom, dept_id))
             
             # Insert into UTILISATEUR
             cursor.execute("""
@@ -80,12 +120,24 @@ def seed_database():
             
             prof_ids.append(pid)
 
-        # 7. Étudiants
+        # 7. Étudiants (Algerian Names)
         student_ids = []
+        algerian_first_names = [
+            "Amine", "Rania", "Youcef", "Sara", "Bilal", "Amina", "Karim", "Lina",
+            "Mehdi", "Yasmine", "Sofiane", "Meriem", "Hamza", "Chaima", "Riad",
+            "Nesrine", "Walid", "Sihem", "Farid", "Houda", "Ilyes", "Maissa",
+            "Nabil", "Imane", "Samir", "Soundous", "Adel", "Selma", "Hichem", "Nawel"
+        ]
+        algerian_last_names = [
+            "Benali", "Khelifi", "Bouazza", "Meziane", "Hamidi", "Saidi", "Larbi",
+            "Medjahdi", "Belkacem", "Brahimi", "Achour", "Bouzid", "Cherif", "Djamel",
+            "Ferhat", "Ghazi", "Haddad", "Slimani", "Kacem", "Lounis"
+        ]
+        
         for i in range(1, 51):
             sid = i
-            nom = f"Etudiant{i}"
-            prenom = f"Prenom{i}"
+            nom = random.choice(algerian_last_names)
+            prenom = random.choice(algerian_first_names)
             email = f"e{i}@student.univ.edu"
             matricule = f"2024{i:04d}"
             # Assign random formation

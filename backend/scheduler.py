@@ -18,6 +18,24 @@ class GreedyScheduler:
         self.student_daily_exams = {} # {student_id: {date_str: count}}
         self.room_schedule = {} # {room_id: {date_str: [(start_time, end_time)]}}
         
+        # Dynamic Constraints (loaded from DB)
+        self.constraints = self.load_constraints()
+        
+    def load_constraints(self):
+        """Load constraint values from configuration_contraintes table."""
+        query = "SELECT nom, valeur FROM configuration_contraintes"
+        results = run_query(query)
+        constraints = {}
+        for row in results:
+            constraints[row['nom']] = row['valeur']
+        
+        # Set defaults if not found
+        return {
+            'max_examens_etudiant_par_jour': constraints.get('max_examens_etudiant_par_jour', 1),
+            'max_surveillances_prof_par_jour': constraints.get('max_surveillances_prof_par_jour', 3),
+            'duree_examen_minutes': constraints.get('duree_examen_minutes', 90)  # 1:30h default
+        }
+        
     def fetch_data(self):
         # 1. Fetch Modules with Student Counts
         # Note: We need to count inscriptions per module
@@ -73,11 +91,11 @@ class GreedyScheduler:
         return slots
 
     def check_student_conflict(self, module_id, date_str):
-        # Rule 3: Student max 1 exam per day
-        # If any student enrolled in this module already has an exam on 'date_str', return Conflict
+        # Rule: Student max N exams per day (from config)
+        max_allowed = self.constraints['max_examens_etudiant_par_jour']
         students_in_module = self.module_students.get(module_id, set())
         for sid in students_in_module:
-            if self.student_daily_exams.get(sid, {}).get(date_str, 0) >= 1:
+            if self.student_daily_exams.get(sid, {}).get(date_str, 0) >= max_allowed:
                 return True # Conflict found
         return False
 
@@ -111,12 +129,13 @@ class GreedyScheduler:
         return None
 
     def find_prof(self, date_str):
-        # Rule 1: Max 3 exams per day
+        # Rule: Max N surveillances per day (from config)
+        max_daily = self.constraints['max_surveillances_prof_par_jour']
         candidates = []
         for p in self.profs:
             pid = p['id_professeur']
             daily = self.prof_daily_load[pid].get(date_str, 0)
-            if daily < 3:
+            if daily < max_daily:
                 candidates.append(p)
                 
         if not candidates:
@@ -168,7 +187,7 @@ class GreedyScheduler:
         mid = mod['id_module']
         pid = prof['id_professeur']
         rid = room['id_salle']
-        duration = 120 # Default exam duration
+        duration = self.constraints['duree_examen_minutes']  # From config (default 90 min)
         
         # Update Prof Load
         self.prof_total_load[pid] += 1
@@ -206,11 +225,17 @@ class GreedyScheduler:
         cursor = conn.cursor()
         
         try:
-            # 1. Clear Future Exams
+            # 1. Clear Future Exams AND Cache Tables
             # Start date usually implies "current session", so we wipe from start_date onwards
-            # Use minimal delete to avoid complex joins constraints if possible, 
-            # BUT we know 'surveillance' cascades on delete from 'examen'.
             cursor.execute("DELETE FROM examen WHERE date_examen >= %s", (self.start_date,))
+            
+            # Clear cache tables for the same date range to prevent accumulation
+            cursor.execute("DELETE FROM cache_capacite_examens WHERE id_examen IN (SELECT id_examen FROM examen WHERE date_examen >= %s)", (self.start_date,))
+            cursor.execute("DELETE FROM etudiant_examens_jour WHERE date_examen >= %s", (self.start_date,))
+            cursor.execute("DELETE FROM suivi_surveillances_jour WHERE date_surveillance >= %s", (self.start_date,))
+            
+            # Reset professor totals (they'll be recalculated)
+            cursor.execute("UPDATE professeur SET total_surveillances = 0")
             
             # 2. Insert New Schedule
             for item in self.schedule:
@@ -235,6 +260,44 @@ class GreedyScheduler:
                 VALUES (%s, %s, 'principal')
                 """
                 cursor.execute(q_surv, (item['id_professeur'], exam_id))
+
+                # --- CACHE TABLES POPULATION ---
+                
+                # 1. cache_capacite_examens
+                nb_students = len(self.module_students.get(item['id_module'], set()))
+                room_cap = next((r['capacite'] for r in self.rooms if r['id_salle'] == item['id_salle']), 0)
+                
+                cursor.execute("""
+                    INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle)
+                    VALUES (%s, %s, %s)
+                """, (exam_id, nb_students, room_cap))
+                
+                # 2. etudiant_examens_jour
+                students = self.module_students.get(item['id_module'], set())
+                for sid in students:
+                    cursor.execute("""
+                        INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
+                        VALUES (%s, %s, 1, %s)
+                        ON DUPLICATE KEY UPDATE 
+                        nb_examens = nb_examens + 1,
+                        liste_examens = CONCAT(liste_examens, ',', %s)
+                    """, (sid, item['date_examen'], str(exam_id), str(exam_id)))
+
+                # 3. suivi_surveillances_jour
+                cursor.execute("""
+                    INSERT INTO suivi_surveillances_jour (id_professeur, date_surveillance, nombre_surveillances)
+                    VALUES (%s, %s, 1)
+                    ON DUPLICATE KEY UPDATE
+                    nombre_surveillances = nombre_surveillances + 1
+                """, (item['id_professeur'], item['date_examen']))
+            
+            # Update professeur.total_surveillances for all assigned professors
+            for pid, count in self.prof_total_load.items():
+                cursor.execute("""
+                    UPDATE professeur 
+                    SET total_surveillances = total_surveillances + %s
+                    WHERE id_professeur = %s
+                """, (count, pid))
             
             conn.commit()
             return {

@@ -12,9 +12,24 @@ def load_css():
 
 load_css()
 
-# Session State Init
+# Session State Init & Persistent Login
 if 'user' not in st.session_state:
     st.session_state.user = None
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+# Auto-restore session from query params (for persistence across refreshes)
+if not st.session_state.user:
+    params = st.query_params
+    if "user_email" in params:
+        # Try to restore the session from stored email
+        from backend.auth import restore_session
+        user = restore_session(params["user_email"])
+        if user:
+            from backend.auth import get_user_name
+            st.session_state.user = user
+            st.session_state.authenticated = True
+            st.session_state.user_name = get_user_name(user['type_utilisateur'], user['id_professeur'], user['id_etudiant'])
 
 def login_page():
     st.markdown("""
@@ -41,11 +56,28 @@ def login_page():
                 user, err = check_login(email, password)
                 if user:
                     st.session_state.user = user
+                    st.session_state.authenticated = True
                     st.session_state.user_name = get_user_name(user['type_utilisateur'], user['id_professeur'], user['id_etudiant'])
+                    # Store email in query params for persistence
+                    st.query_params["user_email"] = email
                     st.success("Connexion réussie !")
                     st.rerun()
                 else:
                     st.error(err)
+        
+        # --- RESCUE MODE: For when utilisateur table is empty ---
+        st.divider()
+        with st.expander("🔧 Mode Récupération (Base de données vide ?)"):
+            st.warning("⚠️ Cela va effacer et recréer toutes les données !")
+            if st.button("🌱 Réinitialiser la Base de Données"):
+                from backend.seed import seed_database
+                with st.spinner("Réinitialisation..."):
+                    success, msg = seed_database()
+                if success:
+                    st.success(f"{msg}")
+                    st.info("Vous pouvez maintenant vous connecter avec admin@univ.edu / admin")
+                else:
+                    st.error(f"Erreur : {msg}")
 
 # def main_dashboard(): ... (Kept as is, but we need to call login_page now)
 
@@ -72,6 +104,8 @@ else:
     st.sidebar.caption(f"Role: {role.replace('_', ' ').capitalize()}")
     if st.sidebar.button("Déconnexion"):
         st.session_state.user = None
+        st.session_state.authenticated = False
+        st.query_params.clear()  # Clear persistent login
         st.rerun()
     st.sidebar.divider()
     
@@ -129,6 +163,10 @@ else:
         st.sidebar.subheader("Zone de Danger")
         if st.sidebar.button("🌱 Réinitialiser Données", help="Reset DB"):
             from backend.seed import seed_database
-            with st.spinner("Reset..."):
-                seed_database()
-                st.toast("Données réinitialisées !", icon="✅")
+            with st.spinner("Réinitialisation en cours..."):
+                success, msg = seed_database()
+                if success:
+                    st.sidebar.success("✅ Données réinitialisées!")
+                    st.rerun()
+                else:
+                    st.sidebar.error(f"❌ Erreur: {msg}")

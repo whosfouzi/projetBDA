@@ -25,6 +25,22 @@ def check_login(email, password):
     else:
         return None, "Email ou mot de passe incorrect."
 
+def restore_session(email):
+    """
+    Restore user session from email (for persistent login).
+    Returns user_dict or None.
+    """
+    query = """
+    SELECT id_compte, email, type_utilisateur, id_professeur, id_etudiant 
+    FROM utilisateur 
+    WHERE email = %s AND actif = 1
+    """
+    results = run_query(query, (email,))
+    
+    if results:
+        return results[0]
+    return None
+
 def get_user_name(role, p_id, s_id):
     """Helper to fetch readable name based on role."""
     if role == 'professeur' and p_id:

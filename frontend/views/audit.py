@@ -10,49 +10,46 @@ def show_audit():
     with col1:
         st.subheader("1. Capacité Salles")
         q1 = """
-        SELECT s.nom as Salle, s.capacite, m.code_module, COUNT(i.id_etudiant) as Inscrits
-        FROM examen e
-        JOIN salle s ON e.id_salle = s.id_salle
+        SELECT e.id_examen, m.code_module as Module, s.nom as Salle, 
+               c.nb_etudiants_inscrits as Inscrits, c.capacite_salle as Capacité
+        FROM cache_capacite_examens c
+        JOIN examen e ON c.id_examen = e.id_examen
         JOIN module m ON e.id_module = m.id_module
-        JOIN inscription i ON m.id_module = i.id_module
-        GROUP BY e.id_examen
-        HAVING Inscrits > s.capacite
+        JOIN salle s ON e.id_salle = s.id_salle
+        WHERE c.nb_etudiants_inscrits > c.capacite_salle
         """
         res1 = run_query(q1)
         if not res1:
-            st.success("✅ Salles OK")
+            st.success("✅ Capacités OK")
         else:
             st.error(f"❌ {len(res1)} Surcharges")
-            st.dataframe(res1)
+            st.dataframe(res1, hide_index=True)
 
     with col2:
         st.subheader("2. Charge Profs")
+        # Use vue_profs_surcharges view
         q2 = """
-        SELECT p.nom, e.date_examen, COUNT(*) as nb_exams
-        FROM examen e
-        JOIN professeur p ON e.id_professeur = p.id_professeur
-        GROUP BY p.id_professeur, e.date_examen
-        HAVING nb_exams > 3
+        SELECT p.nom, p.prenom, v.date_surveillance as Date, v.nombre_surveillances as Surveillances
+        FROM vue_profs_surcharges v
+        JOIN professeur p ON v.id_professeur = p.id_professeur
         """
         res2 = run_query(q2)
         if not res2:
             st.success("✅ Charge OK")
         else:
             st.error(f"❌ {len(res2)} Surcharges")
-            st.dataframe(res2)
+            st.dataframe(res2, hide_index=True)
 
     st.subheader("3. Conflits Étudiants")
+    # Use vue_etudiants_conflits view
     q3 = """
-    SELECT st.nom, st.prenom, e.date_examen, e.heure_debut, COUNT(*) as Examens_Simultanes
-    FROM inscription i
-    JOIN examen e ON i.id_module = e.id_module
-    JOIN etudiant st ON i.id_etudiant = st.id_etudiant
-    GROUP BY st.id_etudiant, e.date_examen, e.heure_debut
-    HAVING Examens_Simultanes > 1
+    SELECT e.nom, e.prenom, v.date_examen as Date, v.nb_examens as Nb_Examens
+    FROM vue_etudiants_conflits v
+    JOIN etudiant e ON v.id_etudiant = e.id_etudiant
     """
     res3 = run_query(q3)
     if not res3:
         st.success("✅ Aucun conflit horaire.")
     else:
         st.error(f"❌ {len(res3)} Conflits")
-        st.dataframe(res3)
+        st.dataframe(res3, hide_index=True)
