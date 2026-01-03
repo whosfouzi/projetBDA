@@ -1,51 +1,154 @@
 import streamlit as st
 import pandas as pd
-from backend.db import run_query
+from backend.db import run_query, get_connection
+from datetime import date
 
-def show_dashboard():
-    st.title("📊 Tableau de Bord")
-    
-    # 1. KPIs
-    col1, col2, col3, col4 = st.columns(4)
-    
-    # Total Exams
-    res_exams = run_query("SELECT COUNT(*) as c FROM examen")
-    nb_exams = res_exams[0]['c'] if res_exams else 0
-    col1.metric("Examens Planifiés", nb_exams)
-    
-    # Upcoming
-    res_up = run_query("SELECT COUNT(*) as c FROM examen WHERE date_examen >= CURDATE()")
-    nb_up = res_up[0]['c'] if res_up else 0
-    col2.metric("À Venir", nb_up)
-    
-    # Students
-    res_stud = run_query("SELECT COUNT(*) as c FROM etudiant")
-    nb_stud = res_stud[0]['c'] if res_stud else 0
-    col3.metric("Étudiants", nb_stud)
-    
-    # Conflicts
-    # For now static, ideally dynamic
-    col4.metric("Conflits Détectés", "0", delta="OK", delta_color="normal")
+# --- CUSTOM UI HELPERS ---
+def card(title, value, sub="", role="neutral"):
+    st.markdown(f"""
+    <div class="academic-card">
+        <span class="role-badge {role}">{role}</span>
+        <h3>{title}</h3>
+        <div class="value">{value}</div>
+        <div class="sub">{sub}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("### Accès Rapide")
-    c1, c2 = st.columns(2)
+# --- ROLE VIEWS ---
+
+def show_admin_dashboard():
+    st.markdown("<h1>🎓 Console d'Administration</h1>", unsafe_allow_html=True)
+    
+    # 1. Strategic KPIs
+    c1, c2, c3, c4 = st.columns(4)
+    
+    # Fetch Data
+    stats = run_query("""
+        SELECT 
+            (SELECT COUNT(*) FROM examen) as total_exams,
+            (SELECT COUNT(*) FROM etudiant) as total_students,
+            (SELECT COUNT(*) FROM professeur) as total_profs,
+            (SELECT COUNT(*) FROM salle) as total_rooms
+    """)[0]
+    
+    with c1: card("Examens Planifiés", stats['total_exams'], "Session Courante", "admin")
+    with c2: card("Étudiants", stats['total_students'], "Inscrits", "student")
+    with c3: card("Professeurs", stats['total_profs'], "Actifs", "prof")
+    with c4: card("Salles", stats['total_rooms'], "Disponibles", "neutral")
+
+    st.markdown("### 🛠️ Actions Rapides & Configuration")
+    
+    # Config Panel (Accordion Style)
+    with st.expander("⚙️ Paramètres de Contraintes Globales", expanded=True):
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nom, valeur FROM configuration_contraintes")
+        constraints = {row['nom']: row['valeur'] for row in cursor.fetchall()}
+        conn.close()
+
+        with st.form("admin_config"):
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                val1 = st.number_input("Max Examens/Étudiant/Jour", 1, 5, constraints.get('max_examens_etudiant_par_jour', 1))
+            with c2:
+                val2 = st.number_input("Max Surv./Prof/Jour", 1, 10, constraints.get('max_surveillances_prof_par_jour', 3))
+            with c3:
+                val3 = st.number_input("Capacité Strict Salle", 1, 500, constraints.get('max_etudiants_par_salle', 20))
+            with c4:
+                val4 = st.number_input("Durée (min)", 30, 240, constraints.get('duree_examen_minutes', 90), step=30)
+                
+            if st.form_submit_button("💾 Mettre à jour"):
+                conn = get_connection()
+                cur = conn.cursor()
+                updates = [
+                    ('max_examens_etudiant_par_jour', val1),
+                    ('max_surveillances_prof_par_jour', val2),
+                    ('max_etudiants_par_salle', val3),
+                    ('duree_examen_minutes', val4)
+                ]
+                for n, v in updates:
+                    cur.execute("UPDATE configuration_contraintes SET valeur=%s WHERE nom=%s", (v, n))
+                conn.commit()
+                conn.close()
+                st.success("Configuration mise à jour!")
+                st.rerun()
+
+def show_prof_dashboard(user):
+    st.markdown(f"<h1>👨‍🏫 Espace Enseignant <span style='font-weight:300; font-size:1.5rem'>| {user['nom']} {user['prenom']}</span></h1>", unsafe_allow_html=True)
+    
+    # Timeline for Today
+    today = date.today()
+    c1, c2 = st.columns([2, 1])
+    
     with c1:
-        st.info("📅 **Planning Global**: Consultez l'emploi du temps complet.")
-    with c2:
-        st.info("🎓 **Mes Examens**: Votre emploi du temps personnalisé.")
+        st.markdown("### 📅 Vos Surveillances Aujourd'hui")
+        today_exams = run_query(f"""
+            SELECT e.heure_debut, s.nom as salle, m.nom as module, e.duree_minutes
+            FROM surveillance surv
+            JOIN examen e ON surv.id_examen = e.id_examen
+            JOIN salle s ON e.id_salle = s.id_salle
+            JOIN module m ON e.id_module = m.id_module
+            WHERE surv.id_professeur = {user['id_professeur']} 
+            AND e.date_examen = CURDATE()
+            ORDER BY e.heure_debut
+        """)
+        
+        if not today_exams:
+            st.info("✅ Aucune surveillance prévue pour aujourd'hui.")
+        else:
+            for exam in today_exams:
+                st.markdown(f"""
+                <div class="timeline-grid">
+                    <div style="font-weight:bold; color:var(--accent); font-size:1.2rem;">
+                        {str(exam['heure_debut'])[:5]}
+                    </div>
+                    <div>
+                        <div style="font-weight:600; font-size:1.1rem;">{exam['module']}</div>
+                        <div style="color:#64748b;">📍 {exam['salle']} • ⏱️ {exam['duree_minutes']} min</div>
+                    </div>
+                </div>
+                <div style="height:10px;"></div>
+                """, unsafe_allow_html=True)
 
-    # Recent Activity
-    st.markdown("### Prochains Examens")
-    df_recent = pd.DataFrame(run_query("""
-        SELECT e.date_examen, m.nom as Module, s.nom as Salle 
-        FROM examen e 
-        JOIN module m ON e.id_module = m.id_module
+    with c2:
+        st.markdown("### 📊 Votre Charge")
+        load = run_query(f"SELECT COUNT(*) as c FROM surveillance WHERE id_professeur={user['id_professeur']}")[0]['c']
+        card("Total Surveillances", load, "Session 2024-2025", "prof")
+
+def show_student_dashboard(user):
+    st.markdown(f"<h1>🎓 Espace Étudiant <span style='font-weight:300; font-size:1.5rem'>| {user['nom']} {user['prenom']}</span></h1>", unsafe_allow_html=True)
+    
+    # Exam Permit Card
+    st.markdown("### 🎫 Vos Prochains Examens")
+    upcoming = run_query(f"""
+        SELECT e.date_examen, e.heure_debut, m.nom as module, s.nom as salle
+        FROM etudiant_examens_jour eel
+        -- Note: simplified query for demo, ideally join inscription -> examen
+        JOIN inscription i ON i.id_etudiant = {user['id_etudiant']}
+        JOIN examen e ON i.id_module = e.id_module
         JOIN salle s ON e.id_salle = s.id_salle
+        JOIN module m ON e.id_module = m.id_module
         WHERE e.date_examen >= CURDATE()
-        ORDER BY e.date_examen ASC 
+        ORDER BY e.date_examen, e.heure_debut
         LIMIT 5
-    """))
-    if not df_recent.empty:
-        st.dataframe(df_recent, use_container_width=True, hide_index=True)
+    """)
+    
+    if not upcoming:
+        st.success("🎉 Aucun examen à venir. Bonne révision !")
     else:
-        st.caption("Aucun examen à venir.")
+        st.dataframe(pd.DataFrame(upcoming), use_container_width=True, hide_index=True)
+
+
+# --- MAIN ROUTER ---
+def show_dashboard():
+    user = st.session_state.get('user', {})
+    role = user.get('type_utilisateur', 'guest')
+    
+    if role in ['admin_examens', 'vice_doyen']:
+        show_admin_dashboard()
+    elif role == 'professeur':
+        show_prof_dashboard(user)
+    elif role == 'etudiant':
+        show_student_dashboard(user)
+    else:
+        st.warning("Veuillez vous connecter.")

@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Exam Scheduler", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="Exam Scheduler", layout="wide", page_icon="🎓", initial_sidebar_state="expanded")
 
 def load_css():
     try:
@@ -44,8 +44,8 @@ def login_page():
         with st.form("login_form"):
             st.subheader("Connexion")
             st.caption("Admin: admin@univ.edu / admin")
-            st.caption("Prof: dupont@univ.edu / password123")
-            st.caption("Etudiant: e1@student.univ.edu / password123")
+            st.caption("Prof: nom_numero@univ.edu (ex: bouchenak_0) / password123")
+            st.caption("Etudiant: e1@student.edu / password123")
             
             email = st.text_input("Email")
             password = st.text_input("Mot de passe", type="password")
@@ -99,18 +99,6 @@ if not st.session_state.user:
 else:
     role = st.session_state.user['type_utilisateur']
     
-    # Sidebar: User Info
-    st.sidebar.title(f"👤 {st.session_state.user_name}")
-    st.sidebar.caption(f"Role: {role.replace('_', ' ').capitalize()}")
-    if st.sidebar.button("Déconnexion"):
-        st.session_state.user = None
-        st.session_state.authenticated = False
-        st.query_params.clear()  # Clear persistent login
-        st.rerun()
-    st.sidebar.divider()
-    
-    st.sidebar.caption(f"Connecté en tant que : {role.upper()}")
-
     # Define Permissions
     # Label -> Function
     menus = {}
@@ -147,10 +135,10 @@ else:
             "📅 Planning Global": show_timetable
         }
 
-    # Render Navigation
+    # Render Navigation (Navbar)
     if menus:
-        selection = st.sidebar.radio("Navigation", list(menus.keys()))
-        page_func = menus[selection]
+        from frontend.components.navbar import Navbar
+        page_func = Navbar(menus)
         page_func()
     else:
         st.error("Aucun menu disponible pour ce rôle.")
@@ -159,14 +147,15 @@ else:
     # Global Tools available to Admins
     # -----------------------------------------------------------------------------
     if role in ['admin_examens', 'vice_doyen']:
-        st.sidebar.divider()
-        st.sidebar.subheader("Zone de Danger")
-        if st.sidebar.button("🌱 Réinitialiser Données", help="Reset DB"):
-            from backend.seed import seed_database
-            with st.spinner("Réinitialisation en cours..."):
-                success, msg = seed_database()
-                if success:
-                    st.sidebar.success("✅ Données réinitialisées!")
-                    st.rerun()
-                else:
-                    st.sidebar.error(f"❌ Erreur: {msg}")
+        with st.sidebar:
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            with st.expander("🔧 Zone Admin"):
+                if st.button("🌱 Réinitialiser Données", help="Reset DB"):
+                    from backend.seed import seed_database
+                    with st.spinner("Réinitialisation..."):
+                        success, msg = seed_database()
+                        if success:
+                            st.success("✅ Données réinitialisées!")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Erreur: {msg}")

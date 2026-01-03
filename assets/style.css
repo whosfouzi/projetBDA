@@ -1,71 +1,427 @@
-/* Main Font */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+/* 
+   --------------------------------------------------------------------------
+   CUSTOM ACADEMIC UI THEME - EXAM SCHEDULER (REFINED)
+   --------------------------------------------------------------------------
+   Goal: Professional, Modern, High-Contrast, Data-Dense.
+*/
 
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+    /* Palette: "Academic Excellence" - Refined Slate & Blue */
+    --primary: #0f172a;
+    /* Slate 900 */
+    --secondary: #475569;
+    /* Slate 600 - Softer for secondary text */
+    --accent: #2563eb;
+    /* Royal Blue */
+    --accent-hover: #1d4ed8;
+    --success: #059669;
+    /* Emerald */
+    --warning: #d97706;
+    /* Amber */
+    --danger: #dc2626;
+    /* Red */
+    --bg-app: #f1f5f9;
+    /* Slate 100 - Slightly warmer background */
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    /* Slate 200 */
+    --border-hover: #cbd5e1;
+    /* Slate 300 */
+
+    /* Spacing & Elevate */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+
+    /* Soft Multi-layered Shadow (Modern Lift) */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* Global Reset & Typography */
 html,
 body,
 [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Outfit', sans-serif !important;
+    color: var(--primary);
+    background-color: var(--bg-app);
+    -webkit-font-smoothing: antialiased;
 }
 
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background-color: #f8f9fa;
-    border-right: 1px solid #e9ecef;
-}
-
-/* Titles */
-h1 {
-    color: #1e3a8a;
-    /* Corporate Blue */
-    font-weight: 700;
-}
-
+h1,
 h2,
-h3 {
-    color: #374151;
-    /* Slate 700 */
+h3,
+h4 {
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: -0.025em;
+    color: var(--primary);
 }
 
-/* Metrics Cards */
-[data-testid="stMetric"] {
-    background-color: #ffffff;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e5e7eb;
+h1 {
+    font-weight: 800;
+    font-size: 2.5rem !important;
+    margin-bottom: 2rem !important;
 }
 
-[data-testid="stMetricLabel"] {
-    font-size: 0.875rem;
-    color: #6b7280;
+h2 {
+    font-weight: 700;
+    font-size: 1.75rem !important;
+    margin-top: 2rem !important;
+    margin-bottom: 1.5rem !important;
 }
 
-[data-testid="stMetricValue"] {
-    font-size: 1.5rem;
-    color: #111827;
+/* Hide Streamlit Clutter */
+footer,
+header {
+    display: none !important;
+}
+
+/* APP CONTAINER */
+.block-container {
+    padding-top: 3rem !important;
+    padding-bottom: 6rem !important;
+    max-width: 90% !important;
+    /* Slightly narrower for better focus on content */
+}
+
+/* --- CUSTOM COMPONENT: ACADEMIC CARD --- */
+.academic-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+.academic-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-4px);
+    border-color: var(--accent);
+}
+
+/* Subtle micro-gradient for depth */
+.academic-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent), #60a5fa);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.academic-card:hover::before {
+    opacity: 1;
+}
+
+.academic-card h3 {
+    margin: 0 0 0.75rem 0 !important;
+    font-size: 0.85rem !important;
+    text-transform: uppercase;
     font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--secondary);
 }
 
-/* Buttons */
+.academic-card .value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--primary);
+    font-family: 'Outfit', sans-serif;
+}
+
+.academic-card .sub {
+    font-size: 0.85rem;
+    color: var(--secondary);
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* --- CUSTOM COMPONENT: ROLE BADGE --- */
+.role-badge {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    display: inline-block;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.role-badge.admin {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.role-badge.prof {
+    background: #e0e7ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+}
+
+.role-badge.student {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+
+/* --- CUSTOM TIMELINE GRID --- */
+.timeline-grid {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 1.5rem;
+    background: white;
+    padding: 1.75rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease;
+    margin-bottom: 1rem;
+}
+
+.timeline-grid:hover {
+    transform: scale(1.01);
+    box-shadow: var(--shadow-md);
+}
+
+/* --- STREAMLIT WIDGET OVERRIDES --- */
+
+/* Buttons: Refined & Modern */
 .stButton>button {
-    background-color: #2563eb;
-    color: white;
-    border-radius: 0.375rem;
-    border: none;
-    font-weight: 500;
+    border-radius: var(--radius-md) !important;
+    font-weight: 600 !important;
+    border: 1px solid var(--border) !important;
+    background: white !important;
+    color: var(--primary) !important;
+    padding: 0.65rem 1.25rem !important;
+    box-shadow: var(--shadow-sm) !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .stButton>button:hover {
-    background-color: #1d4ed8;
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    background: #f8fafc !important;
+    box-shadow: var(--shadow-md) !important;
 }
 
-/* Dataframes */
+/* Primary Action Button Logic */
+div[data-testid="stHorizontalBlock"] .stButton>button {
+    background: var(--primary) !important;
+    color: white !important;
+    border: none !important;
+}
+
+div[data-testid="stHorizontalBlock"] .stButton>button:hover {
+    background: var(--accent) !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+/* Inputs & Selects - Clean & Soft */
+[data-baseweb="select"],
+[data-baseweb="input"],
+[data-baseweb="textarea"] {
+    border-radius: var(--radius-md) !important;
+    border-color: var(--border) !important;
+    transition: all 0.2s ease !important;
+}
+
+[data-baseweb="select"]:focus-within,
+[data-baseweb="input"]:focus-within {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* Dataframe Clean-up */
 [data-testid="stDataFrame"] {
-    border: 1px solid #e5e7eb;
-    border-radius: 0.5rem;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm);
 }
 
-/* Alerts */
+[data-testid="stDataFrame"] thead th {
+    background: #f8fafc !important;
+    color: var(--secondary) !important;
+    font-weight: 700 !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.05em !important;
+    border-bottom: 2px solid var(--border) !important;
+}
+
+/* Expander -> "Premium Accordion" */
+.streamlit-expanderHeader {
+    background-color: white !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 1rem 1.5rem !important;
+    font-weight: 700 !important;
+    color: var(--primary) !important;
+}
+
+.streamlit-expanderContent {
+    border: 1px solid var(--border) !important;
+    border-top: none !important;
+    border-radius: 0 0 var(--radius-md) var(--radius-md) !important;
+    background: #ffffff !important;
+    padding: 1.5rem !important;
+}
+
+/* Custom Alert Styling */
 .stAlert {
-    border-radius: 0.5rem;
+    border-radius: var(--radius-md) !important;
+    border: none !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+/* --- ASIDE / SIDEBAR NAVIGATION --- */
+[data-testid="stSidebar"] {
+    background-color: var(--primary) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+    width: 280px !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+    padding: 2rem 1rem !important;
+}
+
+/* Sidebar Logo / Header */
+.sidebar-header {
+    margin-bottom: 2rem;
+    padding: 0 1rem;
+}
+
+.sidebar-header h1 {
+    color: white !important;
+    font-size: 1.5rem !important;
+    margin: 0 !important;
+}
+
+/* Sidebar Radio Navigation (Pills inside Sidebar) */
+[data-testid="stSidebar"] [data-testid="stRadio"] {
+    background: transparent !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin-bottom: 2rem !important;
+    width: 100%;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"]>label {
+    padding: 0.85rem 1.25rem !important;
+    border-radius: var(--radius-md) !important;
+    font-weight: 500 !important;
+    color: #94a3b8 !important;
+    /* light slate */
+    transition: all 0.2s ease !important;
+    background: transparent !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"]>label:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: white !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"]>label[data-checked="true"] {
+    background: var(--accent) !important;
+    color: white !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+/* Hide the dot/circle in the radio buttons */
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] p {
+    margin-left: -20px !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label div:first-child {
+    display: none !important;
+}
+
+/* User Profile in Sidebar Footer */
+.sidebar-user {
+    padding: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: auto;
+    color: #e2e8f0;
+}
+
+/* --- PRO MATRIX TABLE --- */
+.matrix-container {
+    overflow-x: auto;
+    margin: 2.5rem 0;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: white;
+    box-shadow: var(--shadow-lg);
+}
+
+.pro-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Outfit', sans-serif;
+}
+
+.pro-matrix-table th,
+.pro-matrix-table td {
+    padding: 16px 20px;
+    border: 1px solid #f1f5f9;
+}
+
+.pro-matrix-table thead tr th {
+    background: #f8fafc;
+    color: var(--secondary);
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+.pro-matrix-table thead tr:nth-child(2) th {
+    background: white;
+    font-size: 1.25rem;
+    font-weight: 800;
+    border-bottom: 2px solid var(--primary);
+}
+
+.pro-matrix-table .side-header {
+    background: #f8fafc;
+    font-weight: 800;
+    border-right: 2px solid var(--primary);
+    color: var(--secondary);
+}
+
+.pro-matrix-table .row-label {
+    font-weight: 700;
+    text-align: left;
+    background: #fdfdfd;
+}
+
+.pro-matrix-table .cell-room {
+    font-weight: 600;
+    background: #fff;
+    color: var(--accent);
+}
+
+.pro-matrix-table .cell-empty {
+    color: #e2e8f0;
 }

@@ -23,13 +23,122 @@ def show_generate():
                 scheduler.solve()
                 results = scheduler.save()
             
-            st.success("✅ Planning généré et sauvegardé !")
-            m1, m2 = st.columns(2)
-            m1.metric("Examens Placés", results['assigned'])
-            m2.metric("Non Placés", len(results['unscheduled']))
+            st.success(f"✅ Planning généré avec succès ! ({results['assigned']} créneaux)")
+            st.markdown("---")
             
-            if results['unscheduled']:
-                st.warning(f"⚠️ Modules non planifiés : {results['unscheduled']}")
+            # --- SMART MATRIX VISUALIZATION ---
+            from backend.db import run_query
+            import pandas as pd
+            
+            # 1. Fetch Basic Exam Data
+            q_exams = f"""
+            SELECT 
+                e.id_examen, e.date_examen as Date, e.heure_debut as Heure,
+                m.id_module, m.code_module as Code, m.nom as Module, s.nom as Salle
+            FROM examen e
+            JOIN module m ON e.id_module = m.id_module
+            JOIN salle s ON e.id_salle = s.id_salle
+            WHERE e.date_examen >= '{start_date}'
+            ORDER BY e.date_examen, e.heure_debut, s.nom
+            """
+            df_exams = pd.DataFrame(run_query(q_exams))
+            
+            # 2. Fetch Student Counts per Speciality per Module (Implicit)
+            q_counts = """
+            SELECT m.id_module, s.nom as Specialite, COUNT(e.id_etudiant) as nb
+            FROM module m
+            JOIN specialite s ON m.id_spec = s.id_spec
+            LEFT JOIN etudiant e ON s.id_spec = e.id_spec
+            GROUP BY m.id_module, s.id_spec
+            """
+            df_counts = pd.DataFrame(run_query(q_counts))
+
+            if not df_exams.empty:
+                # 3. Smart Allocation & Grouping
+                spec_grid = {} 
+                occupancy = {r['id_examen']: r['nb_etudiants_inscrits'] 
+                            for r in run_query("SELECT id_examen, nb_etudiants_inscrits FROM cache_capacite_examens")}
+                sessions = df_exams.groupby(['id_module', 'Date', 'Heure', 'Code', 'Module'])
+
+                for (mid, d, h, code, m_name), session_exams in sessions:
+                    sorted_exams = session_exams.sort_values('Salle').to_dict('records')
+                    mod_counts = df_counts[df_counts['id_module'] == mid].to_dict('records')
+                    
+                    exam_idx = 0
+                    current_room_rem = occupancy.get(sorted_exams[exam_idx]['id_examen'], 0) if sorted_exams else 0
+                    
+                    for s_count in mod_counts:
+                        s_name = s_count['Specialite']
+                        s_rem = s_count['nb']
+                        g_count = 1
+                        
+                        if s_name not in spec_grid: spec_grid[s_name] = {}
+                        session_key = (d, h, code, m_name)
+                        spec_grid[s_name][session_key] = []
+                        
+                        while s_rem > 0 and exam_idx < len(sorted_exams):
+                            spec_grid[s_name][session_key].append({
+                                "group": f"G{g_count}",
+                                "salle": sorted_exams[exam_idx]['Salle']
+                            })
+                            
+                            take = min(s_rem, current_room_rem)
+                            s_rem -= take
+                            current_room_rem -= take
+                            
+                            if current_room_rem <= 0:
+                                exam_idx += 1
+                                if exam_idx < len(sorted_exams):
+                                    current_room_rem = occupancy.get(sorted_exams[exam_idx]['id_examen'], 0)
+                            g_count += 1
+
+                # Selectbox by Speciality
+                all_s_names = sorted(df_counts['Specialite'].unique())
+                selected_spec = st.selectbox("Sélectionnez une Spécialité pour voir les résultats", all_s_names)
+                
+                def format_time(t):
+                    if hasattr(t, 'total_seconds'):
+                        seconds = int(t.total_seconds())
+                        hours = (seconds // 3600) % 24
+                        minutes = (seconds % 3600) // 60
+                        return f"{hours:02d}:{minutes:02d}"
+                    return str(t)[:5]
+
+                s_sessions = spec_grid.get(selected_spec, {})
+                if not s_sessions:
+                    st.info(f"Aucun examen pour {selected_spec}.")
+                else:
+                    flat_rows = []
+                    for (d, h, code, m_name), rooms in s_sessions.items():
+                        for r in rooms:
+                            flat_rows.append({
+                                "Date": d,
+                                "Heure": format_time(h),
+                                "Code": code,
+                                "Module": m_name,
+                                "Salle": r['salle'],
+                                "Groupe": r['group']
+                            })
+                    
+                    df_s = pd.DataFrame(flat_rows).sort_values(['Date', 'Heure'])
+                    if df_s.empty:
+                        st.info(f"Aucun examen pour {selected_spec}.")
+                    else:
+                        st.markdown(f"### 🗓️ Résultats : {selected_spec}")
+                        st.dataframe(
+                            df_s[["Date", "Heure", "Code", "Module", "Groupe", "Salle"]],
+                            column_config={
+                                "Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
+                            },
+                            use_container_width=True,
+                            hide_index=True
+                        )
+            else:
+                st.warning("Aucun examen généré.")
                 
         except Exception as e:
             st.error(f"Erreur technique : {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
+
