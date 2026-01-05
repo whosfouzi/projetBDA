@@ -10,7 +10,7 @@ def show_timetable():
     SELECT 
         e.id_examen, e.date_examen as Date, e.heure_debut as Heure,
         m.id_module, m.code_module as Code, m.nom as Module,
-        s.nom as Salle, CONCAT(p.prenom, ' ', p.nom) as Surveillant,
+        s.nom as Salle, s.capacite as TotalCap, CONCAT(p.prenom, ' ', p.nom) as Surveillant,
         c.nb_etudiants_inscrits as Occupied
     FROM examen e
     JOIN module m ON e.id_module = m.id_module

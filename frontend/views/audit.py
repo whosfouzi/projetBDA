@@ -27,11 +27,14 @@ def show_audit():
 
     with col2:
         st.subheader("2. Charge Profs")
-        # Use vue_profs_surcharges view
+        # Check if any prof has more than max allowed (usually 3)
         q2 = """
-        SELECT p.nom, p.prenom, v.date_surveillance as Date, v.nombre_surveillances as Surveillances
-        FROM vue_profs_surcharges v
-        JOIN professeur p ON v.id_professeur = p.id_professeur
+        SELECT p.nom, p.prenom, e.date_examen as Date, COUNT(*) as Surveillances
+        FROM surveillance s
+        JOIN professeur p ON s.id_professeur = p.id_professeur
+        JOIN examen e ON s.id_examen = e.id_examen
+        GROUP BY p.id_professeur, e.date_examen
+        HAVING Surveillances > (SELECT valeur FROM configuration_contraintes WHERE nom='max_surveillances_prof_par_jour' LIMIT 1)
         """
         res2 = run_query(q2)
         if not res2:
@@ -41,11 +44,14 @@ def show_audit():
             st.dataframe(res2, hide_index=True)
 
     st.subheader("3. Conflits Étudiants")
-    # Use vue_etudiants_conflits view
+    # Check if any student has > 1 exam per day (Implicit enrollment)
     q3 = """
-    SELECT e.nom, e.prenom, v.date_examen as Date, v.nb_examens as Nb_Examens
-    FROM vue_etudiants_conflits v
-    JOIN etudiant e ON v.id_etudiant = e.id_etudiant
+    SELECT stu.nom, stu.prenom, ex.date_examen as Date, COUNT(*) as Nb_Examens
+    FROM etudiant stu
+    JOIN module m ON stu.id_spec = m.id_spec
+    JOIN examen ex ON m.id_module = ex.id_module
+    GROUP BY stu.id_etudiant, ex.date_examen
+    HAVING Nb_Examens > (SELECT valeur FROM configuration_contraintes WHERE nom='max_examens_etudiant_par_jour' LIMIT 1)
     """
     res3 = run_query(q3)
     if not res3:

@@ -122,13 +122,12 @@ def show_student_dashboard(user):
     st.markdown("### 🎫 Vos Prochains Examens")
     upcoming = run_query(f"""
         SELECT e.date_examen, e.heure_debut, m.nom as module, s.nom as salle
-        FROM etudiant_examens_jour eel
-        -- Note: simplified query for demo, ideally join inscription -> examen
-        JOIN inscription i ON i.id_etudiant = {user['id_etudiant']}
-        JOIN examen e ON i.id_module = e.id_module
+        FROM etudiant stu
+        JOIN module m ON stu.id_spec = m.id_spec
+        JOIN examen e ON m.id_module = e.id_module
         JOIN salle s ON e.id_salle = s.id_salle
-        JOIN module m ON e.id_module = m.id_module
-        WHERE e.date_examen >= CURDATE()
+        WHERE stu.id_etudiant = {user['id_etudiant']}
+        AND e.date_examen >= CURDATE()
         ORDER BY e.date_examen, e.heure_debut
         LIMIT 5
     """)
