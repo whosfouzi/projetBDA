@@ -122,8 +122,8 @@ def seed_database():
         
         # 7. Admin & Specific Demo Accounts
         admin_pw = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918' # hash for 'admin'
-        chef_pw = 'e3790db054cbf8659d4c9d91819660fb2559779df3f5fd43a9686c7be0e4e69b' # hash for 'chef123'
-        doyen_pw = '1ed02622e920d36254a6bc66a4f5c9497e26f30a21f64fcc891176b541655077' # hash for 'doyen123'
+        chef_pw = 'fa0990ab6f2ecfd562611cedad67152e8c1117f91c22d15094d1e242314243af' # hash for 'chef123'
+        doyen_pw = '384fe335d04e0940d1c4daafafb8ec3f997ee5cd841a8dc67d18d397668a0c05' # hash for 'doyen123'
         
         # Admin
         cursor.execute("INSERT INTO utilisateur (email, mot_de_passe_hash, type_utilisateur, actif) VALUES ('admin@univ.edu', %s, 'admin_examens', 1)", (admin_pw,))
