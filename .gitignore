@@ -33,3 +33,14 @@ venv.bak/
 
 # Streamlit
 .streamlit/
+! .streamlit/config.toml
+! .streamlit/secrets.toml
+
+# OS junk
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
