@@ -258,13 +258,55 @@ def show_vice_doyen_dashboard(user):
             st.markdown("**Volume Étudiant par Type**")
             st.bar_chart(df_rooms.set_index('Categorie')['Total_Etudiants'], color="#8b5cf6")
 
-    st.markdown("### ✅ État des Validations Administrative")
+    st.markdown("### ✅ Validation Globale du Planning")
+    
+    # 1. Fetch Dept Validation Status
     validations = run_query("""
-        SELECT d.nom as Département, IF(v.est_valide, '✅ Validé', '⏳ En attente') as Statut, v.date_validation
+        SELECT d.nom as Département, IF(v.est_valide, '✅ Validé', '⏳ En attente') as Statut, v.date_validation, v.est_valide
         FROM departement d
         LEFT JOIN validation_edt v ON d.id_dep = v.id_dep AND v.session_nom = 'Janvier 2026'
+        WHERE d.nom != 'Décanat'
     """)
-    st.table(validations)
+    
+    # Show status table
+    df_val = pd.DataFrame(validations)[['Département', 'Statut', 'date_validation']]
+    st.table(df_val)
+    
+    # 2. Logic for Global Validation
+    all_depts_valid = all(row['est_valide'] for row in validations)
+    
+    # Check if already globally valid (Décanat)
+    global_val = run_query("""
+        SELECT v.est_valide, v.date_validation 
+        FROM validation_edt v 
+        JOIN departement d ON v.id_dep = d.id_dep 
+        WHERE d.nom = 'Décanat' AND v.session_nom = 'Janvier 2026'
+    """)
+    is_published = global_val and global_val[0]['est_valide']
+    
+    st.markdown("#### 🏁 Décision Finale")
+    if is_published:
+        st.success(f"🏆 Planning Global Validé et Publié le {global_val[0]['date_validation']}")
+    elif all_depts_valid:
+        st.success("✅ Tous les départements ont validé. Le planning est prêt pour la signature finale.")
+        if st.button("🖋️ Signer et Publier le Planning Global", type="primary"):
+            # Fetch Decanat ID
+            decanat_id = run_query("SELECT id_dep FROM departement WHERE nom = 'Décanat'")[0]['id_dep']
+            
+            # Validate
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO validation_edt (id_dep, session_nom, est_valide, date_validation, id_professeur_validateur) 
+                VALUES (%s, 'Janvier 2026', 1, NOW(), %s)
+                ON DUPLICATE KEY UPDATE est_valide=1, date_validation=NOW()
+            """, (decanat_id, user.get('id_professeur'))) # Doyen might not have id_prof linked if manual, but seed links it.
+            conn.commit()
+            conn.close()
+            st.balloons()
+            st.rerun()
+    else:
+        st.warning("⚠️ La validation globale sera disponible une fois que tous les chefs de département auront validé leur planning.")
 
 def show_chef_departement_dashboard(user):
     # Fetch Dept Info

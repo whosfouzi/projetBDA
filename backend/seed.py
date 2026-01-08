@@ -27,7 +27,7 @@ def seed_database():
         # 2. Institutional Hierarchy
         cursor.execute("INSERT INTO faculte (nom) VALUES ('Faculté des Sciences')")
         fac_id = cursor.lastrowid
-        depts_data = ["Informatique", "Mathématiques", "Physique", "Chimie", "Biologie", "Agronomie", "STAPS"]
+        depts_data = ["Informatique", "Mathématiques", "Physique", "Chimie", "Biologie", "Agronomie", "STAPS", "Décanat"]
         dept_ids = {}
         for dname in depts_data:
             cursor.execute("INSERT INTO departement (nom, id_fac) VALUES (%s, %s)", (dname, fac_id))
