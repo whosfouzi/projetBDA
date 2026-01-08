@@ -44,17 +44,36 @@ def login_page():
         with st.form("login_form"):
             st.subheader("Connexion")
             
-            with st.expander("🔑 Comptes de Démonstration (Demo)"):
-                st.markdown("""
-                | Rôle | Email | Password |
-                | :--- | :--- | :--- |
-                | **Directeur** | `admin@univ.edu` | `admin` |
-                | **Vice-Doyen** | `doyen@univ.edu` | `doyen123` |
-                | **Chef Dept (Chimie)** | `chef.chimie@univ.edu` | `chef123` |
-                | **Professeur** | `bouchenak_0@univ.edu` | `password123` |
-                | **Étudiant (Chimie)** | `e202400074@student.edu` | `password123` |
-                """)
-                st.info("💡 Les étudiants ne voient leur planning qu'après validation par leur Chef de Département.")
+            st.markdown("""
+            <div style="background-color: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 10px; border-left: 5px solid #3b82f6; margin-bottom: 20px;">
+                <h4 style="margin-top:0; color:#3b82f6;">🔑 Comptes de Démonstration (Demo)</h4>
+                <div style="max-height: 250px; overflow-y: auto;">
+                    <table style="width:100%; font-size: 0.85rem; border-collapse: collapse;">
+                        <tr style="border-bottom: 1px solid rgba(0,0,0,0.1);">
+                            <th style="padding: 5px; text-align: left;">Rôle</th>
+                            <th style="padding: 5px; text-align: left;">Email</th>
+                            <th style="padding: 5px; text-align: left;">Password</th>
+                        </tr>
+                        <tr><td>👤 Directeur</td><td><code>admin@univ.edu</code></td><td><code>admin</code></td></tr>
+                        <tr><td>🏛️ Vice-Doyen</td><td><code>doyen@univ.edu</code></td><td><code>doyen123</code></td></tr>
+                        <tr style="background-color: rgba(59, 130, 246, 0.05);"><td colspan="3" style="font-weight: bold; padding: 5px; font-size: 0.75rem;">CHEFS DE DÉPARTEMENT (Valideurs)</td></tr>
+                        <tr><td>🧪 Chimie</td><td><code>chef.chimie@univ.edu</code></td><td><code>chef123</code></td></tr>
+                        <tr><td>💻 Info</td><td><code>chef.info@univ.edu</code></td><td><code>chef123</code></td></tr>
+                        <tr><td>📐 Maths</td><td><code>chef.maths@univ.edu</code></td><td><code>chef123</code></td></tr>
+                        <tr><td>⚡ Physique</td><td><code>chef.phys@univ.edu</code></td><td><code>chef123</code></td></tr>
+                        <tr><td>🔬 Bio</td><td><code>chef.bio@univ.edu</code></td><td><code>chef123</code></td></tr>
+                        <tr><td>🚜 Agro</td><td><code>chef.agro@univ.edu</code></td><td><code>chef123</code></td></tr>
+                        <tr><td>🏃 STAPS</td><td><code>chef.staps@univ.edu</code></td><td><code>chef123</code></td></tr>
+                        <tr style="background-color: rgba(59, 130, 246, 0.05);"><td colspan="3" style="font-weight: bold; padding: 5px; font-size: 0.75rem;">AUTRES ACTEURS</td></tr>
+                        <tr><td>👨‍🏫 Professeur</td><td><code>bouchenak_0@univ.edu</code></td><td><code>password123</code></td></tr>
+                        <tr><td>🎓 Étudiant</td><td><code>e202400074@student.edu</code></td><td><code>password123</code></td></tr>
+                    </table>
+                </div>
+                <p style="font-size: 0.8rem; margin-top: 10px; color: #1e40af;">
+                    🛡️ Les étudiants/profs accèdent au planning après validation du Chef.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
             
             email = st.text_input("Email")
             password = st.text_input("Mot de passe", type="password")
