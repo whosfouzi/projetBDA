@@ -74,10 +74,12 @@ h2 {
 }
 
 /* Hide Streamlit Clutter */
-footer,
-header {
+/* Hide Streamlit Clutter */
+footer {
     display: none !important;
 }
+
+/* header { display: none !important; }  <-- Keeping header visible for Sidebar Toggle */
 
 /* APP CONTAINER */
 .block-container {
@@ -293,7 +295,7 @@ div[data-testid="stHorizontalBlock"] .stButton>button:hover {
 [data-testid="stSidebar"] {
     background-color: var(--primary) !important;
     border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
-    width: 280px !important;
+    /* width: 280px !important;  <-- Letting Streamlit handle width */
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
@@ -328,33 +330,33 @@ div[data-testid="stHorizontalBlock"] .stButton>button:hover {
     gap: 0.5rem;
 }
 
-[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"]>label {
-    padding: 0.85rem 1.25rem !important;
+/* CSS UPDATE: Aggressive Radio Button Styling */
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    padding: 0.5rem 1rem !important;
     border-radius: var(--radius-md) !important;
-    font-weight: 500 !important;
-    color: #94a3b8 !important;
-    /* light slate */
-    transition: all 0.2s ease !important;
+    cursor: pointer !important;
     background: transparent !important;
-}
-
-[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"]>label:hover {
-    background: rgba(255, 255, 255, 0.05) !important;
     color: white !important;
+    transition: background 0.2s ease !important;
 }
 
-[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"]>label[data-checked="true"] {
+/* Force ALL text elements inside labels to be white */
+[data-testid="stSidebar"] [data-testid="stRadio"] label * {
+    color: white !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] {
     background: var(--accent) !important;
-    color: white !important;
-    box-shadow: var(--shadow-md) !important;
 }
 
-/* Hide the dot/circle in the radio buttons */
-[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] p {
-    margin-left: -20px !important;
-}
-
-[data-testid="stSidebar"] [data-testid="stRadio"] label div:first-child {
+/* Hide the radio circle/dot */
+[data-testid="stSidebar"] [data-testid="stRadio"] label>div:first-child {
     display: none !important;
 }
 

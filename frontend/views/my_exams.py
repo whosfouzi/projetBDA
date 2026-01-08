@@ -46,17 +46,68 @@ def show_my_exams():
         return run_query(query, (prof_id,))
 
     df = pd.DataFrame()
+    is_validated = False
+    id_dep = None
 
     if role == 'etudiant':
-        data = get_student_exams(user['id_etudiant'])
-        df = pd.DataFrame(data)
+        # Get Dept
+        res_dep = run_query("""
+            SELECT a.id_dep 
+            FROM etudiant e 
+            JOIN specialite s ON e.id_spec = s.id_spec 
+            JOIN annee_etude a ON s.id_annee = a.id_annee 
+            WHERE e.id_etudiant = %s
+        """, (user['id_etudiant'],))
+        if res_dep: id_dep = res_dep[0]['id_dep']
+        
+        # Check Validation
+        if id_dep:
+            v = run_query("SELECT est_valide FROM validation_edt WHERE id_dep = %s AND session_nom = 'Janvier 2026'", (id_dep,))
+            is_validated = v[0]['est_valide'] if v else False
+
+        if is_validated:
+            data = get_student_exams(user['id_etudiant'])
+            df = pd.DataFrame(data)
+        else:
+            st.warning("⏳ Le planning de votre département est en attente de validation par le Chef de Département.")
+
     elif role == 'professeur':
-        data = get_prof_exams(user['id_professeur'])
-        df = pd.DataFrame(data)
-    elif role == 'admin_examens' or role == 'vice_doyen': # If admin tests this view
-        st.info("En tant qu'Admin, vous n'avez pas d'examens personnels. Voici une vue simulée vide.")
+        # Get Dept
+        res_dep = run_query("SELECT id_departement FROM professeur WHERE id_professeur = %s", (user['id_professeur'],))
+        if res_dep: id_dep = res_dep[0]['id_departement']
+        
+        # Check Validation
+        if id_dep:
+            v = run_query("SELECT est_valide FROM validation_edt WHERE id_dep = %s AND session_nom = 'Janvier 2026'", (id_dep,))
+            is_validated = v[0]['est_valide'] if v else False
+
+        if is_validated:
+            data = get_prof_exams(user['id_professeur'])
+            df = pd.DataFrame(data)
+        else:
+            st.warning("⏳ Le planning de votre département est en attente de validation par le Chef de Département.")
+
+    elif role == 'admin_examens' or role == 'vice_doyen' or role == 'chef_departement':
+        st.info("Cette vue est réservée aux Étudiants et Professeurs pour leur planning personnel.")
     
-    if df.empty:
-        st.info("Rien à afficher.")
-    else:
+    if not df.empty:
+        # Format Time
+        def format_time(t):
+            if pd.isnull(t): return ""
+            try:
+                if hasattr(t, 'total_seconds'): 
+                    seconds = int(t.total_seconds())
+                    hours = (seconds // 3600) % 24
+                    minutes = (seconds % 3600) // 60
+                    return f"{hours:02d}:{minutes:02d}"
+                s = str(t)
+                if ":" in s:
+                    parts = s.split(":")
+                    return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+                return s[:5]
+            except:
+                return str(t)
+        df['Heure'] = df['Heure'].apply(format_time)
         st.dataframe(df, use_container_width=True, hide_index=True)
+    elif is_validated:
+        st.info("Rien à afficher.")

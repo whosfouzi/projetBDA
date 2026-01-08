@@ -2,42 +2,41 @@ import streamlit as st
 
 def Navbar(menu_dict):
     """
-    Renders an Aside (Sidebar) navigation bar.
+    Renders navigation in the sidebar using native Streamlit components.
     """
     with st.sidebar:
-        # Branding
-        st.markdown("""
-            <div class='sidebar-header'>
-                <h1 style='color: white !important; font-size: 1.5rem !important; margin: 0 !important;'>🎓 UMBB EXAM</h1>
-                <p style='color: #94a3b8; font-size: 0.8rem;'>Sciences Portal</p>
-            </div>
-        """, unsafe_allow_html=True)
+        # Header
+        st.title("🎓 UMBB EXAM")
+        st.caption("Sciences Portal")
         
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.divider()
         
-        # Navigation
-        selected_label = st.radio(
-            "Navigation",
-            options=list(menu_dict.keys()),
-            label_visibility="collapsed",
-            key="navbar_selection"
-        )
+        # Navigation Menu
+        st.subheader("Navigation")
         
-        st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
+        # Use buttons for each menu item
+        for menu_label in menu_dict.keys():
+            if st.button(menu_label, use_container_width=True, key=f"nav_{menu_label}"):
+                st.session_state['selected_page'] = menu_label
         
-        # User & Logout
+        # Set default if not set
+        if 'selected_page' not in st.session_state or st.session_state['selected_page'] not in menu_dict:
+            st.session_state['selected_page'] = list(menu_dict.keys())[0]
+        
+        st.divider()
+        
+        # User Info
         user_name = st.session_state.get('user_name', 'Utilisateur')
-        st.markdown(f"""
-            <div class='sidebar-user'>
-                <div style='font-size: 0.8rem; opacity: 0.7;'>Connecté en tant que</div>
-                <div style='font-weight: 600;'>{user_name}</div>
-            </div>
-        """, unsafe_allow_html=True)
+        st.caption(f"👤 {user_name}")
         
-        if st.button("Déconnexion", use_container_width=True):
+        # Logout
+        if st.button("🚪 Déconnexion", use_container_width=True, type="secondary"):
             st.session_state.user = None
             st.session_state.authenticated = False
+            st.session_state.pop('selected_page', None)
             st.query_params.clear()
             st.rerun()
-            
+    
+    # Return the selected page function
+    selected_label = st.session_state.get('selected_page', list(menu_dict.keys())[0])
     return menu_dict[selected_label]

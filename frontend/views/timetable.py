@@ -87,12 +87,20 @@ def show_timetable():
     # Time Formatting helper for the dataframe
     def format_time(t):
         if pd.isnull(t): return ""
-        if hasattr(t, 'total_seconds'): 
-            seconds = int(t.total_seconds())
-            hours = (seconds // 3600) % 24
-            minutes = (seconds % 3600) // 60
-            return f"{hours:02d}:{minutes:02d}"
-        return str(t)[:5]
+        try:
+            if hasattr(t, 'total_seconds'): 
+                seconds = int(t.total_seconds())
+                hours = (seconds // 3600) % 24
+                minutes = (seconds % 3600) // 60
+                return f"{hours:02d}:{minutes:02d}"
+            # Handle string objects like "09:00:00"
+            s = str(t)
+            if ":" in s:
+                parts = s.split(":")
+                return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+            return s[:5]
+        except:
+            return str(t)
     df_exams['Heure'] = df_exams['Heure'].apply(format_time)
 
     # Effective Capacity logic for Admin
@@ -104,6 +112,23 @@ def show_timetable():
     all_s_names = sorted(df_counts['Specialite'].unique())
     selected_spec = st.selectbox("Sélectionnez une Spécialité", all_s_names)
     
+    # --- VALIDATION CHECK (For Students/Profs) ---
+    is_validated = True
+    if role in ['etudiant', 'professeur']:
+        res_dep_spec = run_query("""
+            SELECT a.id_dep 
+            FROM specialite s 
+            JOIN annee_etude a ON s.id_annee = a.id_annee 
+            WHERE s.nom = %s
+        """, (selected_spec,))
+        if res_dep_spec:
+            v_spec = run_query("SELECT est_valide FROM validation_edt WHERE id_dep = %s AND session_nom = 'Janvier 2026'", (res_dep_spec[0]['id_dep'],))
+            is_validated = v_spec[0]['est_valide'] if v_spec else False
+
+    if not is_validated:
+        st.warning(f"⏳ Le planning pour {selected_spec} est en attente de validation par le Chef de Département.")
+        return
+
     cols_to_show = ['Date', 'Heure', 'Code', 'Module', 'Surveillant', 'Salle']
     if role in ['admin_examens', 'vice_doyen']:
         cols_to_show.append('Capacité')
@@ -113,27 +138,39 @@ def show_timetable():
     if not s_sessions:
         st.info(f"Aucun examen pour {selected_spec}.")
     else:
-        # Flatten the grid into a list
+        # Flatten the grid into a list, but GROUP by session key to show one row per module
         flat_rows = []
         for (d, h, code, m_name), rooms in s_sessions.items():
-            for r in rooms:
-                flat_rows.append({
-                    "Date": d,
-                    "Heure": format_time(h),
-                    "Code": code,
-                    "Module": m_name,
-                    "Salle": r['salle'],
-                    "Surveillant": r['prof'],
-                    "Groupe": r['group']
-                })
+            salle_list = ", ".join(list(set(r['salle'] for r in rooms)))
+            surv_list = ", ".join(list(set(r['prof'] for r in rooms if r['prof'])))
+            
+            flat_rows.append({
+                "Date": d,
+                "Heure": format_time(h),
+                "Code": code,
+                "Module": m_name,
+                "Salles": salle_list,
+                "Surveillants": surv_list
+            })
+        df_s = pd.DataFrame(flat_rows).sort_values(['Date', 'Heure'])
         
-        df_s = pd.DataFrame(flat_rows)
         if df_s.empty:
             st.info(f"Aucun examen pour {selected_spec}.")
         else:
             st.markdown(f"### 📅 Emploi du Temps : {selected_spec}")
+            
+            # Export CSV Button
+            csv = df_s.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Télécharger le planning (CSV)",
+                data=csv,
+                file_name=f"planning_{selected_spec.replace(' ', '_')}.csv",
+                mime='text/csv',
+                use_container_width=True
+            )
+            
             st.dataframe(
-                df_s[["Date", "Heure", "Code", "Module", "Groupe", "Salle", "Surveillant"]],
+                df_s[["Date", "Heure", "Code", "Module", "Salles", "Surveillants"]],
                 column_config={
                     "Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
                 },

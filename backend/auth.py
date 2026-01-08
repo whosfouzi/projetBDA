@@ -13,27 +13,32 @@ def check_login(email, password):
     hashed = hash_password(password)
     
     query = """
-    SELECT id_compte, email, type_utilisateur, id_professeur, id_etudiant 
-    FROM utilisateur 
-    WHERE email = %s AND mot_de_passe_hash = %s AND actif = 1
+    SELECT 
+        u.id_compte, u.email, u.type_utilisateur, u.id_professeur, u.id_etudiant,
+        COALESCE(p.nom, e.nom) as nom,
+        COALESCE(p.prenom, e.prenom) as prenom
+    FROM utilisateur u
+    LEFT JOIN professeur p ON u.id_professeur = p.id_professeur
+    LEFT JOIN etudiant e ON u.id_etudiant = e.id_etudiant
+    WHERE u.email = %s AND u.mot_de_passe_hash = %s AND u.actif = 1
     """
     results = run_query(query, (email, hashed))
     
     if results:
-        # Return the first match (email should be unique)
         return results[0], None
     else:
         return None, "Email ou mot de passe incorrect."
 
 def restore_session(email):
-    """
-    Restore user session from email (for persistent login).
-    Returns user_dict or None.
-    """
     query = """
-    SELECT id_compte, email, type_utilisateur, id_professeur, id_etudiant 
-    FROM utilisateur 
-    WHERE email = %s AND actif = 1
+    SELECT 
+        u.id_compte, u.email, u.type_utilisateur, u.id_professeur, u.id_etudiant,
+        COALESCE(p.nom, e.nom) as nom,
+        COALESCE(p.prenom, e.prenom) as prenom
+    FROM utilisateur u
+    LEFT JOIN professeur p ON u.id_professeur = p.id_professeur
+    LEFT JOIN etudiant e ON u.id_etudiant = e.id_etudiant
+    WHERE u.email = %s AND u.actif = 1
     """
     results = run_query(query, (email,))
     

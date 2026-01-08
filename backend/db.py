@@ -18,6 +18,7 @@ def run_query(query, params=None):
         cursor.execute(query, params)
         q = query.strip().upper()
         if q.startswith("SELECT") or q.startswith("SHOW") or q.startswith("DESC"):
+            # Ensure we fetch ALL rows (critical for 13k students)
             return cursor.fetchall()
         else:
             conn.commit()

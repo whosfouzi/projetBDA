@@ -97,12 +97,20 @@ def show_generate():
                 selected_spec = st.selectbox("Sélectionnez une Spécialité pour voir les résultats", all_s_names)
                 
                 def format_time(t):
-                    if hasattr(t, 'total_seconds'):
-                        seconds = int(t.total_seconds())
-                        hours = (seconds // 3600) % 24
-                        minutes = (seconds % 3600) // 60
-                        return f"{hours:02d}:{minutes:02d}"
-                    return str(t)[:5]
+                    if pd.isnull(t): return ""
+                    try:
+                        if hasattr(t, 'total_seconds'): 
+                            seconds = int(t.total_seconds())
+                            hours = (seconds // 3600) % 24
+                            minutes = (seconds % 3600) // 60
+                            return f"{hours:02d}:{minutes:02d}"
+                        s = str(t)
+                        if ":" in s:
+                            parts = s.split(":")
+                            return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+                        return s[:5]
+                    except:
+                        return str(t)
 
                 s_sessions = spec_grid.get(selected_spec, {})
                 if not s_sessions:
@@ -110,15 +118,14 @@ def show_generate():
                 else:
                     flat_rows = []
                     for (d, h, code, m_name), rooms in s_sessions.items():
-                        for r in rooms:
-                            flat_rows.append({
-                                "Date": d,
-                                "Heure": format_time(h),
-                                "Code": code,
-                                "Module": m_name,
-                                "Salle": r['salle'],
-                                "Groupe": r['group']
-                            })
+                        salle_list = ", ".join(list(set(r['salle'] for r in rooms)))
+                        flat_rows.append({
+                            "Date": d,
+                            "Heure": format_time(h),
+                            "Code": code,
+                            "Module": m_name,
+                            "Salles": salle_list
+                        })
                     
                     df_s = pd.DataFrame(flat_rows).sort_values(['Date', 'Heure'])
                     if df_s.empty:
@@ -126,7 +133,7 @@ def show_generate():
                     else:
                         st.markdown(f"### 🗓️ Résultats : {selected_spec}")
                         st.dataframe(
-                            df_s[["Date", "Heure", "Code", "Module", "Groupe", "Salle"]],
+                            df_s[["Date", "Heure", "Code", "Module", "Salles"]],
                             column_config={
                                 "Date": st.column_config.DateColumn("Date", format="DD/MM/YYYY"),
                             },

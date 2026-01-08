@@ -43,9 +43,18 @@ def login_page():
     with col2:
         with st.form("login_form"):
             st.subheader("Connexion")
-            st.caption("Admin: admin@univ.edu / admin")
-            st.caption("Prof: nom_numero@univ.edu (ex: bouchenak_0) / password123")
-            st.caption("Etudiant: e1@student.edu / password123")
+            
+            with st.expander("🔑 Comptes de Démonstration (Demo)"):
+                st.markdown("""
+                | Rôle | Email | Password |
+                | :--- | :--- | :--- |
+                | **Directeur** | `admin@univ.edu` | `admin` |
+                | **Vice-Doyen** | `doyen@univ.edu` | `doyen123` |
+                | **Chef Dept (Chimie)** | `chef.chimie@univ.edu` | `chef123` |
+                | **Professeur** | `bouchenak_0@univ.edu` | `password123` |
+                | **Étudiant (Chimie)** | `e202400074@student.edu` | `password123` |
+                """)
+                st.info("💡 Les étudiants ne voient leur planning qu'après validation par leur Chef de Département.")
             
             email = st.text_input("Email")
             password = st.text_input("Mot de passe", type="password")
@@ -90,58 +99,60 @@ from frontend.views.generate import show_generate
 from frontend.views.timetable import show_timetable
 from frontend.views.my_exams import show_my_exams
 from frontend.views.audit import show_audit
+from frontend.views.dept_preview import show_dept_preview
 
-# -----------------------------------------------------------------------------
-# Navigation Logic
 # -----------------------------------------------------------------------------
 if not st.session_state.user:
     login_page()
 else:
     role = st.session_state.user['type_utilisateur']
+    user_name = st.session_state.get('user_name', 'Utilisateur')
     
-    # Define Permissions
-    # Label -> Function
-    menus = {}
-
-    # 1. Vice-Dean / Dean (Strategic)
-    if role == 'vice_doyen':
-        menus = {
-            "📊 Tableau de Bord": show_dashboard,
-            "📅 Planning Global": show_timetable,
-            "🛡️ Audit & Qualité": show_audit
-        }
-
-    # 2. Admin (Operational)
-    elif role == 'admin_examens':
-        menus = {
-            "📊 Tableau de Bord": show_dashboard,
-            "⚙️ Générateur": show_generate,
-            "📅 Planning Global": show_timetable,
-            "🛡️ Audit & Qualité": show_audit
-        }
-
-    # 3. Head of Dept (Validation)
-    elif role == 'chef_departement':
-        menus = {
-            "📊 Tableau de Bord": show_dashboard,
-            "📅 Planning Global": show_timetable,
-            "🛡️ Audit & Qualité": show_audit
-        }
-
-    # 4. Student / Prof (Consultation)
-    elif role in ['professeur', 'etudiant']:
-        menus = {
-            "🎓 Mes Examens": show_my_exams,
-            "📅 Planning Global": show_timetable
-        }
-
-    # Render Navigation (Navbar)
-    if menus:
-        from frontend.components.navbar import Navbar
-        page_func = Navbar(menus)
-        page_func()
+    # SIDEBAR NAVIGATION
+    with st.sidebar:
+        st.title("🎓 UMBB EXAM")
+        st.caption("Sciences Portal")
+        st.divider()
+        
+        # Define menu based on role
+        if role == 'vice_doyen':
+            page_options = ["📊 Tableau de Bord", "📅 Planning Global", "🛡️ Audit & Qualité"]
+        elif role == 'admin_examens':
+            page_options = ["📊 Tableau de Bord", "⚙️ Générateur", "📅 Planning Global", "🛡️ Audit & Qualité"]
+        elif role == 'chef_departement':
+            page_options = ["📊 Tableau de Bord", "🔍 Aperçu Département", "📅 Planning Global", "🛡️ Audit & Qualité"]
+        elif role in ['professeur', 'etudiant']:
+            page_options = ["🎓 Mes Examens", "📅 Planning Global"]
+        else:
+            page_options = []
+        
+        # Navigation
+        selected_page = st.radio("Navigation", page_options, label_visibility="collapsed")
+        
+        st.divider()
+        st.caption(f"👤 {user_name}")
+        
+        if st.button("🚪 Déconnexion", use_container_width=True):
+            st.session_state.user = None
+            st.session_state.authenticated = False
+            st.query_params.clear()
+            st.rerun()
+    
+    # RENDER SELECTED PAGE
+    if selected_page == "📊 Tableau de Bord":
+        show_dashboard()
+    elif selected_page == "⚙️ Générateur":
+        show_generate()
+    elif selected_page == "📅 Planning Global":
+        show_timetable()
+    elif selected_page == "🛡️ Audit & Qualité":
+        show_audit()
+    elif selected_page == "🎓 Mes Examens":
+        show_my_exams()
+    elif selected_page == "🔍 Aperçu Département":
+        show_dept_preview()
     else:
-        st.error("Aucun menu disponible pour ce rôle.")
+        st.error("Page non trouvée")
 
     # -----------------------------------------------------------------------------
     # Global Tools available to Admins

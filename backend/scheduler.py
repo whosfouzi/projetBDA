@@ -64,7 +64,7 @@ class GreedyScheduler:
         # Map students once for efficiency
         spec_students = {} # {id_spec: [sid1, sid2...]}
         for s in all_students:
-            spec_students.setdefault(s['id_spec'], set()).add(s['id_etudiant'])
+            spec_students.setdefault(s['id_spec'], set()).add(int(s['id_etudiant']))
         
         for m in self.modules:
             mid = m['id_module']
@@ -106,9 +106,22 @@ class GreedyScheduler:
         # Rule: Student max N exams per day (from config)
         max_allowed = self.constraints['max_examens_etudiant_par_jour']
         students_in_module = self.module_students.get(module_id, set())
+        
+        # DEBUG: Trace Spec 605
+        # We need to find spec id from module list or just check explicit students
+        # For performance, only trace if we suspect conflict ignored
+        
         for sid in students_in_module:
-            if self.student_daily_exams.get(sid, {}).get(date_str, 0) >= max_allowed:
+            load = self.student_daily_exams.get(sid, {}).get(date_str, 0)
+            if load >= max_allowed:
+                # print(f"CONFLICT: Mod {module_id}, Stud {sid}, Date {date_str}, Load {load} >= {max_allowed}")
                 return True # Conflict found
+            
+            # DEBUG: If load > 0 but < max, wait... max is 1. If load > 0, IT IS >= 1.
+            # So if we are here, load MUST be 0.
+            # if load > 0:
+            #    print(f"WEIRD: Mod {module_id}, Date {date_str}, Load {load} < {max_allowed}?")
+
         return False
 
     def check_room_availability(self, room_id, date_str, start_time, duration_mins=120):
@@ -251,11 +264,22 @@ class GreedyScheduler:
             pass
             
         # Actually, let's update student load here for the WHOLE module assignment
+        if not students:
+            print(f"CRITICAL WARNING: Module {mid} has 0 mapped students! Logic will skip load update.")
+        
         for sid in students:
              if sid not in self.student_daily_exams: self.student_daily_exams[sid] = {}
-             # Only increment if not already counted for this module/time? 
-             # Just incrementing is fine because we only call commit_preliminary once per module.
-             self.student_daily_exams[sid][date_str] = self.student_daily_exams[sid].get(date_str, 0) + 1
+             
+             current_load = self.student_daily_exams[sid].get(date_str, 0)
+             if current_load >= self.constraints['max_examens_etudiant_par_jour']:
+                 print(f"FATAL: Attempting to schedule Mod {mid} for Student {sid} on {date_str}. Current Load: {current_load}")
+                 raise ValueError(f"CRITICAL LOGIC FAILURE: Student {sid} already has {current_load} exams on {date_str}")
+             
+             # DEBUG: Verify we are actually updating
+             if current_load == 0:
+                 pass # print(f"DEBUG: Student {sid} load 0->1 on {date_str} for Mod {mid}")
+
+             self.student_daily_exams[sid][date_str] = current_load + 1
 
         # Now handle the split across rooms
         students_remaining = len(students) if students else mod['nb_students'] # Fallback
@@ -399,6 +423,10 @@ class GreedyScheduler:
             cursor.execute("UPDATE professeur SET total_surveillances = 0")
             
             # 2. Insert New Schedule
+            # To avoid double-counting students in cache tables for split modules,
+            # we track which (student, date, module) triplets have been recorded.
+            recorded_student_exams = set() # {(sid, date, mid)}
+            
             for item in self.final_schedule:
                 # Insert Examen
                 q_exam = """
@@ -425,26 +453,29 @@ class GreedyScheduler:
                 # --- CACHE TABLES POPULATION ---
                 
                 # 1. cache_capacite_examens
-                # Use the specific split count if available, otherwise total (fallback)
-                nb_students = item.get('nb_students_assigned', len(self.module_students.get(item['id_module'], set())))
-                
+                nb_students_in_this_room = item.get('nb_students_assigned', 0)
                 room_cap = next((r['capacite'] for r in self.rooms if r['id_salle'] == item['id_salle']), 0)
                 
                 cursor.execute("""
                     INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle)
                     VALUES (%s, %s, %s)
-                """, (exam_id, nb_students, room_cap))
+                """, (exam_id, nb_students_in_this_room, room_cap))
                 
                 # 2. etudiant_examens_jour
-                students = self.module_students.get(item['id_module'], set())
+                mid = item['id_module']
+                edate = item['date_examen']
+                students = self.module_students.get(mid, set())
+                
                 for sid in students:
-                    cursor.execute("""
-                        INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
-                        VALUES (%s, %s, 1, %s)
-                        ON DUPLICATE KEY UPDATE 
-                        nb_examens = nb_examens + 1,
-                        liste_examens = CONCAT(liste_examens, ',', %s)
-                    """, (sid, item['date_examen'], str(exam_id), str(exam_id)))
+                    if (sid, edate, mid) not in recorded_student_exams:
+                        cursor.execute("""
+                            INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
+                            VALUES (%s, %s, 1, %s)
+                            ON DUPLICATE KEY UPDATE 
+                            nb_examens = nb_examens + 1,
+                            liste_examens = CONCAT(liste_examens, ',', %s)
+                        """, (sid, edate, str(exam_id), str(exam_id)))
+                        recorded_student_exams.add((sid, edate, mid))
 
                 # 3. suivi_surveillances_jour
                 cursor.execute("""
