@@ -120,9 +120,34 @@ def seed_database():
         for i in range(0, len(us_data), chunk_size):
             cursor.executemany("INSERT INTO utilisateur (email, mot_de_passe_hash, type_utilisateur, id_etudiant, actif) VALUES (%s, %s, %s, %s, %s)", us_data[i:i+chunk_size])
         
-        # 7. Admin Account
+        # 7. Admin & Specific Demo Accounts
         admin_pw = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918' # hash for 'admin'
+        chef_pw = 'e3790db054cbf8659d4c9d91819660fb2559779df3f5fd43a9686c7be0e4e69b' # hash for 'chef123'
+        doyen_pw = '1ed02622e920d36254a6bc66a4f5c9497e26f30a21f64fcc891176b541655077' # hash for 'doyen123'
+        
+        # Admin
         cursor.execute("INSERT INTO utilisateur (email, mot_de_passe_hash, type_utilisateur, actif) VALUES ('admin@univ.edu', %s, 'admin_examens', 1)", (admin_pw,))
+        
+        # Vice-Doyen (Logic: Link to a random professor)
+        cursor.execute("SELECT id_professeur FROM professeur LIMIT 1")
+        p_doyen = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO utilisateur (email, mot_de_passe_hash, type_utilisateur, id_professeur, actif) VALUES ('doyen@univ.edu', %s, 'vice_doyen', %s, 1)", (doyen_pw, p_doyen))
+
+        # Chefs de Département
+        dept_emails = {
+            "Informatique": "chef.info@univ.edu",
+            "Mathématiques": "chef.maths@univ.edu",
+            "Physique": "chef.phys@univ.edu",
+            "Chimie": "chef.chimie@univ.edu",
+            "Biologie": "chef.bio@univ.edu",
+            "Agronomie": "chef.agro@univ.edu",
+            "STAPS": "chef.staps@univ.edu"
+        }
+        for dname, email in dept_emails.items():
+            did = dept_ids[dname]
+            cursor.execute("SELECT id_professeur FROM professeur WHERE id_departement = %s LIMIT 1", (did,))
+            p_chef = cursor.fetchone()[0]
+            cursor.execute("INSERT INTO utilisateur (email, mot_de_passe_hash, type_utilisateur, id_professeur, actif) VALUES (%s, %s, 'chef_departement', %s, 1)", (email, chef_pw, p_chef))
 
         conn.commit()
         print("6. 13,000 students created.")
