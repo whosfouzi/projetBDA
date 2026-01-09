@@ -19,7 +19,7 @@ def seed_database():
         print("1. Tables cleaned.")
 
         # 1a. Set realistic constraints
-        cursor.execute("INSERT INTO configuration_contraintes (nom, valeur) VALUES ('max_etudiants_par_salle', 250)")
+        cursor.execute("INSERT INTO configuration_contraintes (nom, valeur) VALUES ('max_etudiants_par_salle', 20)")
         cursor.execute("INSERT INTO configuration_contraintes (nom, valeur) VALUES ('max_examens_etudiant_par_jour', 1)")
         cursor.execute("INSERT INTO configuration_contraintes (nom, valeur) VALUES ('max_surveillances_prof_par_jour', 3)")
         cursor.execute("INSERT INTO configuration_contraintes (nom, valeur) VALUES ('duree_examen_minutes', 90)")
@@ -55,18 +55,18 @@ def seed_database():
 
         # 3. Infrastructure (Massive UMBB Sciences)
         cursor.execute("INSERT INTO batiment (id_batiment, nom) VALUES (1, 'Campus Sciences')")
-        # 12 Amphis (250-600 seats)
+        # 12 Amphis (Strictly 60-70 seats)
         for i in range(1, 13):
             cursor.execute("INSERT INTO salle (nom, capacite, type, id_batiment) VALUES (%s, %s, 'amphi', 1)", 
-                           (f"Amphi {chr(64+i)}", random.choice([300, 400, 600])))
-        # 150 Salles (40-100 seats)
+                           (f"Amphi {chr(64+i)}", random.choice([60, 65, 70])))
+        # 150 Salles (Max 20 seats)
         for i in range(1, 151):
             cursor.execute("INSERT INTO salle (nom, capacite, type, id_batiment) VALUES (%s, %s, 'salle', 1)", 
-                           (f"Salle S{i:02d}", random.choice([40, 60, 80, 100])))
-        # 50 Labs (20-40 seats)
+                           (f"Salle S{i:02d}", 20))
+        # 50 Labs (Max 20 seats)
         for i in range(1, 51):
             cursor.execute("INSERT INTO salle (nom, capacite, type, id_batiment) VALUES (%s, %s, 'labo', 1)", 
-                           (f"Labo L{i:02d}", random.choice([20, 30, 40])))
+                           (f"Labo L{i:02d}", 20))
         print("3. Infrastructure created (Massive Scale).")
 
         # 4. Professors
