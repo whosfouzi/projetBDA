@@ -146,54 +146,107 @@ class GreedyScheduler:
 
     def find_rooms(self, total_students, date_str, start_time):
         """
-        Find a set of rooms to accommodate total_students, with max per room from config.
-        Returns a list of rooms or None.
+        Advanced Room Allocation adhering to Pedagogical Groups logic.
+        1. Logical Groups: Fixed size ~35.
+        2. Allocation:
+           - Amphi (Cap 60-70): Can take multiple groups up to ~60.
+           - Salle (Cap 20): A group must split if > 20 (e.g. 35 -> 20 + 15).
         """
-        MAX_PER_ROOM = self.constraints['max_etudiants_par_salle']
-        # Calculate how many rooms we need
-        import math
-        needed_rooms = math.ceil(total_students / MAX_PER_ROOM)
+        GROUP_SIZE = 35
+        MAX_AMPHI = 60 # Soft cap for pedagogical merging
+        MAX_SALLE = 20
         
-        assigned_rooms = []
+        # 1. Create Logical Groups
+        num_students = total_students
+        groups = []
+        while num_students > 0:
+            sz = min(num_students, GROUP_SIZE)
+            groups.append(sz)
+            num_students -= sz
+            
+        assignments = [] # [{'room': r, 'count': c}]
+        used_room_ids = set()
         
-        # We need to find 'needed_rooms' available rooms
-        # We prefer smaller rooms first to save big ones? Or just any that fit 20?
-        # Since max is 20, any room with cap >= 20 is good. Even cap >= 1 works if we fill it?
-        # The constraint says "no room may host more than 20".
-        # It doesn't say we MUST put 20. But to minimize rooms, we target 20.
-        # Let's naive approach: Find N rooms that have cap >= 1 (we just need space).
-        # Actually, we need rooms that can hold the chunk we put in. 
-        # Simpler: Find N rooms with capacity >= 20. If not enough big rooms, maybe smaller ones?
-        # "This constraint applies to all rooms... no room may host more than 20"
-        # So we cap usage at 20. The room physical capacity must also be respected.
-        # Usage = min(20, room.capacity).
+        # Get all potential rooms once
+        available_rooms = [r for r in self.rooms if self.check_room_availability(r['id_salle'], date_str, start_time)]
+        # Separate Amphis and Salles
+        amphis = sorted([r for r in available_rooms if r['type'] == 'amphi'], key=lambda x: x['capacite'])
+        salles = sorted([r for r in available_rooms if r['type'] != 'amphi'], key=lambda x: x['capacite'], reverse=True) # Big salles first (usually 20 anyway)
         
-        students_to_seat = total_students
-        potential_rooms = []
+        def is_room_used(rid):
+            return rid in used_room_ids
         
-        # Get all available rooms at this slot
-        for r in self.rooms:
-            if self.check_room_availability(r['id_salle'], date_str, start_time):
-                potential_rooms.append(r)
+        def mark_used(rid):
+            used_room_ids.add(rid)
+
+        # 2. Process Groups
+        # We try to fill Amphis first (efficient for multiple groups)
+        # Then Salles for remaining
         
-        # Sort by capacity? Or random?
-        # Let's sort by capacity ascending to use smallest viable rooms first?
-        # Or descending to ensure we fit 20?
-        # We want to fit 20 students comfortably.
-        potential_rooms.sort(key=lambda x: x['capacite'], reverse=True)
+        # Optimization: Try to couple groups into Amphis
+        # E.g. Group 35 + Group 25 = 60 -> Perfect Amphi
         
-        picked = []
-        for r in potential_rooms:
-            cap = min(r['capacite'], MAX_PER_ROOM)
-            if cap > 0:
-                picked.append(r)
-                students_to_seat -= cap
-                if students_to_seat <= 0:
+        current_amphi_idx = 0
+        current_amphi_fill = 0
+        
+        for g_size in groups:
+            allocated = False
+            
+            # A. Try Amphi Allocation (Merge strategy)
+            # Find an amphi that has space or is empty
+            
+            # 1. Check currently open amphi
+            if current_amphi_idx < len(amphis):
+                amp = amphis[current_amphi_idx]
+                # Can we fit this group?
+                if current_amphi_fill + g_size <= min(amp['capacite'], 70): # Hard cap 70
+                    # Assign to this amphi
+                    assignments.append({'room': amp, 'count': g_size})
+                    current_amphi_fill += g_size
+                    mark_used(amp['id_salle'])
+                    allocated = True
+                else:
+                    # This amphi is full/too small for this group addition. Close it.
+                    current_amphi_idx += 1
+                    current_amphi_fill = 0
+                    
+                    # Try next amphi
+                    if current_amphi_idx < len(amphis):
+                        amp = amphis[current_amphi_idx]
+                        if g_size <= min(amp['capacite'], 70):
+                            assignments.append({'room': amp, 'count': g_size})
+                            current_amphi_fill += g_size
+                            mark_used(amp['id_salle'])
+                            allocated = True
+            
+            if allocated: continue
+            
+            # B. If no Amphi, force Split into Salles
+            # Group of 35 -> Salle (20) + Salle (15)
+            
+            remaining_in_group = g_size
+            
+            # Find free salles
+            for s in salles:
+                if is_room_used(s['id_salle']): continue
+                
+                # Take 20 or remaining
+                chunk = min(remaining_in_group, MAX_SALLE)
+                # Also limited by room cap (though data says salles are 20+)
+                chunk = min(chunk, s['capacite'])
+                
+                assignments.append({'room': s, 'count': chunk})
+                mark_used(s['id_salle'])
+                remaining_in_group -= chunk
+                
+                if remaining_in_group <= 0:
+                    allocated = True
                     break
-        
-        if students_to_seat <= 0:
-            return picked
-        return None
+            
+            if not allocated:
+                return None # Could not fit this group -> Fail this slot
+                
+        return assignments
 
     def check_prof_availability(self, prof_id, date_str, start_time, duration_mins=None):
         if duration_mins is None:
@@ -281,18 +334,20 @@ class GreedyScheduler:
 
              self.student_daily_exams[sid][date_str] = current_load + 1
 
-        # Now handle the split across rooms
-        students_remaining = len(students) if students else mod['nb_students'] # Fallback
+        # Now handle the split across rooms based on our specific Allocation Plan
+        # rooms is now [{'room': r, 'count': c}, ...]
         
-        for r in rooms:
+        assigned_total = 0
+        for assignment in rooms:
+            r = assignment['room']
+            count = assignment['count']
             rid = r['id_salle']
             
-            # Calculate how many students in this room
-            # We cap at config Max or room capacity
+            # Double check against strict constraints (just in case)
             limit = self.constraints['max_etudiants_par_salle']
-            cap = min(r['capacite'], limit)
-            students_in_room = min(students_remaining, cap)
-            students_remaining -= students_in_room
+            if r['type'] != 'amphi' and count > limit:
+                # This should not happen if find_rooms is correct
+                print(f"WARNING: Room {rid} assigned {count} > {limit}. Cap: {r['capacite']}")
             
             # Update Room Schedule
             if rid not in self.room_schedule: self.room_schedule[rid] = {}
@@ -306,8 +361,9 @@ class GreedyScheduler:
                 'date_examen': date_str,
                 'heure_debut': t_start,
                 'duree': duration,
-                'nb_students_assigned': students_in_room 
+                'nb_students_assigned': count # Explicit count from our plan
             })
+            assigned_total += count
 
     def assign_professors(self):
         # Group preliminary exams by date
