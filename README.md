@@ -21,9 +21,8 @@ pip install -r requirements.txt
 
 ### 3. Database Configuration
 You need a MySQL database running. 
-1. Import the latest schema and data:
-   - Use the file `optimisation_edt-2.sql`.
-2. Configure **Streamlit Secrets**:
+
+1. **Configure Credentials**:
    - Create a folder named `.streamlit` in the root directory.
    - Create a file `secrets.toml` inside it:
    ```toml
@@ -32,7 +31,13 @@ You need a MySQL database running.
    port = 3306
    user = "your_username"
    password = "your_password"
-   database = "exam_scheduler" # or your target db name
+   database = "exam_scheduler" # Create this DB first in MySQL
+   ```
+
+2. **Initialize Data**:
+   Instead of importing a messy SQL file, simply run our seeding script. This will create the schema and generate 13,000 students + demo accounts automatically.
+   ```bash
+   python3 -m backend.seed
    ```
 
 ### 4. Running the App
