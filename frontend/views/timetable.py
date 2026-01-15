@@ -177,3 +177,79 @@ def show_timetable():
                 use_container_width=True,
                 hide_index=True
             )
+            
+    # 5. Room Inspector (Admin Only)
+    if role in ['admin_examens', 'vice_doyen']:
+        st.divider()
+        st.subheader("🔍 Détails par Salle (Admin)")
+        
+        # Select Room
+        all_rooms_q = "SELECT id_salle, nom FROM salle ORDER BY nom"
+        rooms_db = run_query(all_rooms_q)
+        room_map = {r['nom']: r['id_salle'] for r in rooms_db}
+        selected_room = st.selectbox("Choisir une salle à inspecter", list(room_map.keys()))
+        
+        if selected_room:
+            rid = room_map[selected_room]
+            # Fetch exams in this room
+            q_r_exams = """
+            SELECT e.id_examen, e.date_examen, e.heure_debut, m.nom as Module, m.code_module
+            FROM examen e
+            JOIN module m ON e.id_module = m.id_module
+            WHERE e.id_salle = %s
+            ORDER BY e.date_examen, e.heure_debut
+            """
+            r_exams = run_query(q_r_exams, (rid,))
+            
+            if not r_exams:
+                st.info("Aucun examen dans cette salle.")
+            else:
+                exam_opts = {f"{e['date_examen']} {e['heure_debut']} - {e['Module']}": e['id_examen'] for e in r_exams}
+                selected_exam_label = st.selectbox("Choisir un examen", list(exam_opts.keys()))
+                
+                if selected_exam_label:
+                    eid = exam_opts[selected_exam_label]
+                    
+                    # Fetch Groups in this exam room
+                    q_groups = """
+                    SELECT gt.groupe_numero, gt.assigned_count, s.nom as SpecName, gt.id_spec
+                    FROM exam_groupe_track gt
+                    JOIN specialite s ON gt.id_spec = s.id_spec
+                    WHERE gt.id_examen = %s
+                    ORDER BY s.nom, gt.groupe_numero
+                    """
+                    groups_in_room = run_query(q_groups, (eid,))
+                    
+                    if groups_in_room:
+                        st.write("#### 👥 Groupes assignés")
+                        g_df = pd.DataFrame(groups_in_room)
+                        g_df['Groupe'] = g_df.apply(lambda x: f"Groupe {x['groupe_numero']} ({x['SpecName']})", axis=1)
+                        st.table(g_df[['Groupe', 'assigned_count']])
+                        
+                        # Fetch Students
+                        st.write("#### 🎓 Liste des Étudiants")
+                        # We need to fetch students who belong to these specific groups
+                        # Query construction
+                        all_students = []
+                        for g in groups_in_room:
+                            q_studs = """
+                            SELECT matricule, nom, prenom 
+                            FROM etudiant 
+                            WHERE id_spec = %s AND groupe_numero = %s
+                            ORDER BY nom, prenom
+                            LIMIT %s
+                            """
+                            # Note: The limit is important if the group was split. 
+                            # However, our track table has 'assigned_count'. 
+                            # If the group was split, we only take 'assigned_count' students.
+                            # Which ones? LIMIT is deterministic enough for display if consistent.
+                            # Ideally we would have offset, but for now taking the first N is acceptable visualization
+                            studs = run_query(q_studs, (g['id_spec'], g['groupe_numero'], g['assigned_count']))
+                            for s in studs:
+                                s['Groupe'] = f"G{g['groupe_numero']} {g['SpecName']}"
+                                all_students.append(s)
+                        
+                        if all_students:
+                            st.dataframe(pd.DataFrame(all_students), use_container_width=True)
+                    else:
+                        st.warning("Aucun détail de groupe trouvé pour cet examen.")

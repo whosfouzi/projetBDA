@@ -14,12 +14,16 @@ def check_login(email, password):
     
     query = """
     SELECT 
-        u.id_compte, u.email, u.type_utilisateur, u.id_professeur, u.id_etudiant,
+        u.id_utilisateur, u.email, u.type_utilisateur, u.id_professeur, u.id_etudiant,
         COALESCE(p.nom, e.nom) as nom,
-        COALESCE(p.prenom, e.prenom) as prenom
+        COALESCE(p.prenom, e.prenom) as prenom,
+        s.nom as spec_nom,
+        g.nom as groupe_nom
     FROM utilisateur u
     LEFT JOIN professeur p ON u.id_professeur = p.id_professeur
     LEFT JOIN etudiant e ON u.id_etudiant = e.id_etudiant
+    LEFT JOIN specialite s ON e.id_spec = s.id_spec
+    LEFT JOIN groupe g ON e.id_spec = g.id_spec AND e.groupe_numero = g.numero
     WHERE u.email = %s AND u.mot_de_passe_hash = %s AND u.actif = 1
     """
     results = run_query(query, (email, hashed))
@@ -32,12 +36,16 @@ def check_login(email, password):
 def restore_session(email):
     query = """
     SELECT 
-        u.id_compte, u.email, u.type_utilisateur, u.id_professeur, u.id_etudiant,
+        u.id_utilisateur, u.email, u.type_utilisateur, u.id_professeur, u.id_etudiant,
         COALESCE(p.nom, e.nom) as nom,
-        COALESCE(p.prenom, e.prenom) as prenom
+        COALESCE(p.prenom, e.prenom) as prenom,
+        s.nom as spec_nom,
+        g.nom as groupe_nom
     FROM utilisateur u
     LEFT JOIN professeur p ON u.id_professeur = p.id_professeur
     LEFT JOIN etudiant e ON u.id_etudiant = e.id_etudiant
+    LEFT JOIN specialite s ON e.id_spec = s.id_spec
+    LEFT JOIN groupe g ON e.id_spec = g.id_spec AND e.groupe_numero = g.numero
     WHERE u.email = %s AND u.actif = 1
     """
     results = run_query(query, (email,))

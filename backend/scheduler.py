@@ -41,38 +41,53 @@ class GreedyScheduler:
         }
         
     def fetch_data(self):
-        # 1. Fetch Modules with Student Counts (Implicit by Speciality)
+        # 1. Fetch Modules
         q_mods = """
         SELECT 
             m.id_module, m.nom, m.id_spec, 
-            a.niveau as year_lvl, a.id_dep as dept_id,
-            (SELECT COUNT(*) FROM etudiant e WHERE e.id_spec = m.id_spec) as nb_students
+            a.niveau as year_lvl, a.id_dep as dept_id
         FROM module m
         JOIN specialite s ON m.id_spec = s.id_spec
         JOIN annee_etude a ON s.id_annee = a.id_annee
-        GROUP BY m.id_module, m.nom, m.id_spec, a.niveau, a.id_dep
-        ORDER BY nb_students DESC
         """
         self.modules = run_query(q_mods)
         
-        # 2. Fetch Module -> Student Mapping (Implicit by Speciality)
-        # Instead of reading from 'inscription', we link students to modules via 'id_spec'
-        q_all_students = "SELECT id_etudiant, id_spec FROM etudiant"
+        # 2. Fetch Students & Groups
+        q_all_students = "SELECT id_etudiant, id_spec, groupe_numero FROM etudiant"
         all_students = run_query(q_all_students)
         
         self.module_students = {}
-        # Map students once for efficiency
-        spec_students = {} # {id_spec: [sid1, sid2...]}
+        self.spec_groups = {} # {id_spec: {gid: count}}
+        self.spec_students = {} # {id_spec: [sids]}
+
+        # Pre-process students
         for s in all_students:
-            spec_students.setdefault(s['id_spec'], set()).add(int(s['id_etudiant']))
-        
+            sid = s['id_etudiant']
+            spec = s['id_spec']
+            gid = s['groupe_numero']
+            
+            self.spec_students.setdefault(spec, set()).add(sid)
+            
+            if spec not in self.spec_groups: self.spec_groups[spec] = {}
+            if gid: 
+                self.spec_groups[spec][gid] = self.spec_groups[spec].get(gid, 0) + 1
+
         for m in self.modules:
             mid = m['id_module']
-            sid_spec = m['id_spec']
-            self.module_students[mid] = spec_students.get(sid_spec, set())
+            spec = m['id_spec']
+            
+            # Link students
+            self.module_students[mid] = self.spec_students.get(spec, set())
+            m['nb_students'] = len(self.module_students[mid])
+            
+            # Link groups (List of dicts: {'gid': gid, 'size': count})
+            groups_dict = self.spec_groups.get(spec, {})
+            # Sort groups by size desc
+            m['groups'] = sorted([{'gid': k, 'size': v} for k, v in groups_dict.items()], key=lambda x: x['size'], reverse=True)
+
             
         # 3. Fetch Rooms
-        self.rooms = run_query("SELECT id_salle, nom, capacite FROM salle ORDER BY capacite ASC")
+        self.rooms = run_query("SELECT id_salle, nom, capacite, type FROM salle ORDER BY capacite ASC")
         
         # 4. Fetch Profs
         self.profs = run_query("SELECT id_professeur, nom, prenom, id_departement FROM professeur")
@@ -144,25 +159,17 @@ class GreedyScheduler:
                 return False # Overlap, not available
         return True
 
-    def find_rooms(self, total_students, date_str, start_time):
+    def find_rooms(self, groups_list, date_str, start_time):
         """
-        Advanced Room Allocation adhering to Pedagogical Groups logic.
-        1. Logical Groups: Fixed size ~35.
-        2. Allocation:
-           - Amphi (Cap 60-70): Can take multiple groups up to ~60.
-           - Salle (Cap 20): A group must split if > 20 (e.g. 35 -> 20 + 15).
+        Input: groups_list = [{'gid': 1, 'size': 35}, ...]
+        Returns: assignments = [{'room': r, 'count': c, 'groups': [{'gid': 1, 'count': 35}]}]
         """
-        GROUP_SIZE = 35
-        MAX_AMPHI = 60 # Soft cap for pedagogical merging
+        MAX_AMPHI = 70 
         MAX_SALLE = 20
         
-        # 1. Create Logical Groups
-        num_students = total_students
-        groups = []
-        while num_students > 0:
-            sz = min(num_students, GROUP_SIZE)
-            groups.append(sz)
-            num_students -= sz
+        # Use explicit groups
+        groups = groups_list
+
             
         assignments = [] # [{'room': r, 'count': c}]
         used_room_ids = set()
@@ -189,7 +196,9 @@ class GreedyScheduler:
         current_amphi_idx = 0
         current_amphi_fill = 0
         
-        for g_size in groups:
+        for g in groups:
+            g_size = g['size']
+            gid = g['gid']
             allocated = False
             
             # A. Try Amphi Allocation (Merge strategy)
@@ -201,7 +210,15 @@ class GreedyScheduler:
                 # Can we fit this group?
                 if current_amphi_fill + g_size <= min(amp['capacite'], 70): # Hard cap 70
                     # Assign to this amphi
-                    assignments.append({'room': amp, 'count': g_size})
+                    
+                    # Check if we already have an assignment entry for this room
+                    existing_assign = next((a for a in assignments if a['room']['id_salle'] == amp['id_salle']), None)
+                    if existing_assign:
+                        existing_assign['count'] += g_size
+                        existing_assign['groups'].append({'gid': gid, 'count': g_size})
+                    else:
+                        assignments.append({'room': amp, 'count': g_size, 'groups': [{'gid': gid, 'count': g_size}]})
+                    
                     current_amphi_fill += g_size
                     mark_used(amp['id_salle'])
                     allocated = True
@@ -214,7 +231,7 @@ class GreedyScheduler:
                     if current_amphi_idx < len(amphis):
                         amp = amphis[current_amphi_idx]
                         if g_size <= min(amp['capacite'], 70):
-                            assignments.append({'room': amp, 'count': g_size})
+                            assignments.append({'room': amp, 'count': g_size, 'groups': [{'gid': gid, 'count': g_size}]})
                             current_amphi_fill += g_size
                             mark_used(amp['id_salle'])
                             allocated = True
@@ -235,7 +252,7 @@ class GreedyScheduler:
                 # Also limited by room cap (though data says salles are 20+)
                 chunk = min(chunk, s['capacite'])
                 
-                assignments.append({'room': s, 'count': chunk})
+                assignments.append({'room': s, 'count': chunk, 'groups': [{'gid': gid, 'count': chunk}]})
                 mark_used(s['id_salle'])
                 remaining_in_group -= chunk
                 
@@ -283,7 +300,7 @@ class GreedyScheduler:
                     continue
                 
                 # Rule 4: Room Availability
-                rooms = self.find_rooms(nb_studs, date_str, t_start)
+                rooms = self.find_rooms(mod['groups'], date_str, t_start)
                 if not rooms:
                     continue
                 
@@ -361,7 +378,8 @@ class GreedyScheduler:
                 'date_examen': date_str,
                 'heure_debut': t_start,
                 'duree': duration,
-                'nb_students_assigned': count # Explicit count from our plan
+                'nb_students_assigned': count, # Explicit count from our plan
+                'groups': assignment.get('groups', []) # Mapping of groups in this room
             })
             assigned_total += count
 
@@ -458,7 +476,8 @@ class GreedyScheduler:
             'date_examen': d,
             'heure_debut': t_start,
             'duree': duration,
-            'nb_students_assigned': exam.get('nb_students_assigned', 0)
+            'nb_students_assigned': exam.get('nb_students_assigned', 0),
+            'groups': exam.get('groups', [])
         })
 
     def save(self):
@@ -471,6 +490,7 @@ class GreedyScheduler:
             cursor.execute("DELETE FROM examen WHERE date_examen >= %s", (self.start_date,))
             
             # Clear cache tables for the same date range to prevent accumulation
+            cursor.execute("DELETE FROM exam_groupe_track WHERE id_examen IN (SELECT id_examen FROM examen WHERE date_examen >= %s)", (self.start_date,))
             cursor.execute("DELETE FROM cache_capacite_examens WHERE id_examen IN (SELECT id_examen FROM examen WHERE date_examen >= %s)", (self.start_date,))
             cursor.execute("DELETE FROM etudiant_examens_jour WHERE date_examen >= %s", (self.start_date,))
             cursor.execute("DELETE FROM suivi_surveillances_jour WHERE date_surveillance >= %s", (self.start_date,))
@@ -505,6 +525,24 @@ class GreedyScheduler:
                 VALUES (%s, %s, 'principal')
                 """
                 cursor.execute(q_surv, (item['id_professeur'], exam_id))
+
+                # Insert Exam Group Tracking
+                # item['groups'] = [{'gid': 1, 'count': 35}, ...]
+                # We need id_spec from module
+                spec_id_for_track = item['id_module'] # Wait, module has id_spec but we need to fetch it from self.modules logic or query
+                # item['id_module'] is just INT. 
+                # We can get id_spec from self.modules lookup, but quicker to trust item structure if we have mod object
+                # item in final_schedule only has IDs. 
+                # Optimization: We can fetch spec_id from DB or memory. Memory:
+                spec_id_val = next((m['id_spec'] for m in self.modules if m['id_module'] == item['id_module']), None)
+
+                if spec_id_val and 'groups' in item:
+                    for g in item['groups']:
+                        # g is {'gid': X, 'count': Y}
+                        cursor.execute("""
+                            INSERT INTO exam_groupe_track (id_examen, id_spec, groupe_numero, assigned_count)
+                            VALUES (%s, %s, %s, %s)
+                        """, (exam_id, spec_id_val, g['gid'], g['count']))
 
                 # --- CACHE TABLES POPULATION ---
                 

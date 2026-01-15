@@ -65,8 +65,8 @@ def login_page():
                         <tr><td>🚜 Agro</td><td><code>chef.agro@univ.edu</code></td><td><code>chef123</code></td></tr>
                         <tr><td>🏃 STAPS</td><td><code>chef.staps@univ.edu</code></td><td><code>chef123</code></td></tr>
                         <tr style="background-color: rgba(59, 130, 246, 0.05);"><td colspan="3" style="font-weight: bold; padding: 5px; font-size: 0.75rem;">AUTRES ACTEURS</td></tr>
-                        <tr><td>👨‍🏫 Professeur</td><td><code>bouchenak_0@univ.edu</code></td><td><code>password123</code></td></tr>
-                        <tr><td>🎓 Étudiant</td><td><code>e202400074@student.edu</code></td><td><code>password123</code></td></tr>
+                        <tr><td>👨‍🏫 Professeur</td><td><code>amine.ziani@univ.edu</code></td><td><code>password123</code></td></tr>
+                        <tr><td>🎓 Étudiant</td><td><code>sarah.toumi@student.edu</code></td><td><code>password123</code></td></tr>
                     </table>
                 </div>
                 <p style="font-size: 0.8rem; margin-top: 10px; color: #1e40af;">
@@ -151,6 +151,12 @@ else:
         st.divider()
         st.caption(f"👤 {user_name}")
         
+        # Display Student Info
+        if role == 'etudiant':
+             spec = st.session_state.user.get('spec_nom', 'N/A')
+             grp = st.session_state.user.get('groupe_nom', 'N/A')
+             st.info(f"📚 {spec}\n\n👥 {grp}")
+
         if st.button("🚪 Déconnexion", use_container_width=True):
             st.session_state.user = None
             st.session_state.authenticated = False

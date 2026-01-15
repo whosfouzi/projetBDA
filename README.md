@@ -47,10 +47,12 @@ streamlit run app.py
 - `frontend/`: UI implementation (Sidebar, Dashboard, Timetables).
 - `assets/`: Custom Academic UI styling.
 
-## 🔑 Default Accounts
-- **Admin**: `admin@univ.edu` / `admin`
-- **Professors**: `nom_numero@univ.edu` (ex: `bouchenak_0`) / `password123`
-- **Students**: `e12345@student.edu` / `password123`
+## 🔑 Default Accounts (Demo)
+- **Directeur**: `admin@univ.edu` / `admin`
+- **Vice-Doyen**: `doyen@univ.edu` / `doyen123`
+- **Chef Dept**: `chef.chimie@univ.edu` / `chef123`
+- **Professors**: `bouchenak_0@univ.edu` / `password123`
+- **Students**: `e202400074@student.edu` / `password123`
 
 ---
 *Note: If your database is empty, you can use the "Mode Récupération" button on the Login page to seed 13,000 students and 1,000 professors automatically.*
