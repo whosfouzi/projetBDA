@@ -31,7 +31,7 @@ CREATE TABLE `annee_etude` (
   `id_annee` int(11) NOT NULL,
   `niveau` varchar(50) NOT NULL,
   `id_dep` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `annee_etude`
@@ -83,7 +83,7 @@ INSERT INTO `annee_etude` (`id_annee`, `niveau`, `id_dep`) VALUES
 CREATE TABLE `batiment` (
   `id_batiment` int(11) NOT NULL,
   `nom` varchar(255) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `batiment`
@@ -105,7 +105,7 @@ CREATE TABLE `cache_capacite_examens` (
   `id_examen` int(11) NOT NULL,
   `nb_etudiants_inscrits` int(11) DEFAULT NULL,
   `capacite_salle` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `cache_capacite_examens`
@@ -3264,7 +3264,7 @@ CREATE TABLE `configuration_contraintes` (
   `id_contrainte` int(11) NOT NULL,
   `nom` varchar(255) NOT NULL,
   `valeur` int(11) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `configuration_contraintes`
@@ -3286,7 +3286,7 @@ CREATE TABLE `departement` (
   `id_dep` int(11) NOT NULL,
   `nom` varchar(255) NOT NULL,
   `id_fac` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `departement`
@@ -3315,7 +3315,7 @@ CREATE TABLE `etudiant` (
   `prenom` varchar(100) NOT NULL,
   `id_spec` int(11) NOT NULL,
   `groupe_numero` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `etudiant`
@@ -16346,7 +16346,7 @@ CREATE TABLE `etudiant_examens_jour` (
   `date_examen` date NOT NULL,
   `nb_examens` int(11) DEFAULT 0,
   `liste_examens` varchar(255) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `etudiant_examens_jour`
@@ -85411,7 +85411,7 @@ CREATE TABLE `examen` (
   `heure_debut` time DEFAULT NULL,
   `duree_minutes` int(11) DEFAULT NULL,
   `annee_univ` varchar(20) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `examen`
@@ -88574,7 +88574,7 @@ CREATE TABLE `exam_groupe_track` (
   `id_spec` int(11) NOT NULL,
   `groupe_numero` int(11) NOT NULL,
   `assigned_count` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `exam_groupe_track`
@@ -91961,7 +91961,7 @@ INSERT INTO `exam_groupe_track` (`id_examen`, `id_spec`, `groupe_numero`, `assig
 CREATE TABLE `faculte` (
   `id_fac` int(11) NOT NULL,
   `nom` varchar(255) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `faculte`
@@ -91980,7 +91980,7 @@ CREATE TABLE `groupe` (
   `id_spec` int(11) NOT NULL,
   `numero` int(11) NOT NULL,
   `nom` varchar(50) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `groupe`
@@ -92425,7 +92425,7 @@ CREATE TABLE `module` (
   `semestre` int(11) DEFAULT NULL,
   `id_spec` int(11) DEFAULT NULL,
   `id_professeur_resp` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `module`
@@ -92759,7 +92759,7 @@ CREATE TABLE `professeur` (
   `grade` varchar(50) DEFAULT NULL,
   `id_departement` int(11) DEFAULT NULL,
   `total_surveillances` int(11) DEFAULT 0
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `professeur`
@@ -92939,7 +92939,7 @@ CREATE TABLE `salle` (
   `capacite` int(11) NOT NULL,
   `type` enum('amphi','salle','labo') NOT NULL,
   `id_batiment` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `salle`
@@ -93027,7 +93027,7 @@ CREATE TABLE `specialite` (
   `id_spec` int(11) NOT NULL,
   `nom` varchar(255) NOT NULL,
   `id_annee` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `specialite`
@@ -93097,7 +93097,7 @@ CREATE TABLE `suivi_surveillances_jour` (
   `id_professeur` int(11) NOT NULL,
   `date_surveillance` date NOT NULL,
   `nombre_surveillances` int(11) DEFAULT 0
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `suivi_surveillances_jour`
@@ -94538,7 +94538,7 @@ CREATE TABLE `surveillance` (
   `id_professeur` int(11) DEFAULT NULL,
   `id_examen` int(11) DEFAULT NULL,
   `role` varchar(50) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `surveillance`
@@ -97702,7 +97702,7 @@ CREATE TABLE `utilisateur` (
   `id_professeur` int(11) DEFAULT NULL,
   `id_etudiant` int(11) DEFAULT NULL,
   `actif` tinyint(1) DEFAULT 1
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `utilisateur`
@@ -110925,7 +110925,7 @@ CREATE TABLE `validation_edt` (
   `est_valide` tinyint(1) DEFAULT 0,
   `date_validation` datetime DEFAULT NULL,
   `id_professeur_validateur` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
 
 --
 -- Dumping data for table `validation_edt`
