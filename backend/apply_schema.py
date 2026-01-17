@@ -2,6 +2,9 @@ from backend.db import get_connection
 
 def apply_sql_schema(sql_file):
     conn = get_connection()
+    if conn is None:
+        print("ERROR: Impossible de se connecter à la base de données.")
+        return False
     cursor = conn.cursor()
     
     try:

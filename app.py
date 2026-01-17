@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import traceback
 
 st.set_page_config(page_title="Exam Scheduler", layout="wide", page_icon="🎓", initial_sidebar_state="expanded")
 
@@ -19,17 +20,33 @@ if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 # Auto-restore session from query params (for persistence across refreshes)
+# Wrap in try-except to prevent crashes during app initialization
 if not st.session_state.user:
-    params = st.query_params
-    if "user_email" in params:
-        # Try to restore the session from stored email
-        from backend.auth import restore_session
-        user = restore_session(params["user_email"])
-        if user:
-            from backend.auth import get_user_name
-            st.session_state.user = user
-            st.session_state.authenticated = True
-            st.session_state.user_name = get_user_name(user['type_utilisateur'], user['id_professeur'], user['id_etudiant'])
+    try:
+        params = st.query_params
+        if "user_email" in params:
+            # Try to restore the session from stored email
+            try:
+                from backend.auth import restore_session, get_user_name
+                user = restore_session(params["user_email"])
+                if user:
+                    try:
+                        st.session_state.user = user
+                        st.session_state.authenticated = True
+                        user_name = get_user_name(
+                            user.get('type_utilisateur', ''),
+                            user.get('id_professeur'),
+                            user.get('id_etudiant')
+                        )
+                        st.session_state.user_name = user_name
+                    except Exception as e:
+                        print(f"Warning: Could not restore session state: {e}")
+            except Exception as e:
+                print(f"Warning: Could not restore session: {e}")
+                # Don't crash - just continue without restored session
+    except Exception as e:
+        print(f"Warning: Session restore check failed: {e}")
+        # Don't crash - just continue
 
 def login_page():
     st.markdown("""
@@ -80,18 +97,142 @@ def login_page():
             submit = st.form_submit_button("Se connecter", use_container_width=True)
             
             if submit:
-                from backend.auth import check_login, get_user_name
-                user, err = check_login(email, password)
-                if user:
-                    st.session_state.user = user
-                    st.session_state.authenticated = True
-                    st.session_state.user_name = get_user_name(user['type_utilisateur'], user['id_professeur'], user['id_etudiant'])
-                    # Store email in query params for persistence
-                    st.query_params["user_email"] = email
-                    st.success("Connexion réussie !")
-                    st.rerun()
-                else:
-                    st.error(err)
+                # CRITICAL: Wrap EVERYTHING in try-except to prevent server crash
+                # This is the outermost safety net - no exception can escape
+                try:
+                    # Import safely - wrap in try-except
+                    check_login_func = None
+                    get_user_name_func = None
+                    
+                    try:
+                        from backend.auth import check_login as _check_login, get_user_name as _get_user_name
+                        check_login_func = _check_login
+                        get_user_name_func = _get_user_name
+                    except Exception as e:
+                        error_msg = f"Erreur d'importation: {str(e)}"
+                        print(f"ERROR: Import failed: {e}")
+                        traceback.print_exc()
+                        try:
+                            st.error(f"❌ {error_msg}")
+                        except:
+                            pass
+                        # Stop here if imports fail - don't continue
+                        check_login_func = None
+                    
+                    # If imports failed, stop here
+                    if check_login_func is None or get_user_name_func is None:
+                        return
+                    
+                    # Validate inputs first
+                    if not email or not password:
+                        try:
+                            st.error("Veuillez remplir tous les champs.")
+                        except:
+                            pass
+                    else:
+                        # Execute login check - check_login NEVER raises, always returns (user, err)
+                        user = None
+                        err = None
+                        
+                        # Don't use st.spinner in form context - it can cause issues
+                        # Just call check_login directly - it's safe
+                        try:
+                            # check_login is safe - it never raises exceptions
+                            user, err = check_login_func(email, password)
+                        except Exception as e:
+                            # This should never happen, but safety first
+                            error_msg = f"Erreur lors de la vérification: {type(e).__name__}: {str(e)}"
+                            print(f"CRITICAL ERROR: check_login raised exception: {error_msg}")
+                            traceback.print_exc()
+                            try:
+                                st.error(f"❌ {error_msg}")
+                            except:
+                                pass
+                            user, err = None, error_msg
+                        
+                        # Process login result
+                        if user:
+                            # Login successful - set session state safely
+                            try:
+                                # Set session state one by one to catch any issues
+                                st.session_state.user = user
+                                st.session_state.authenticated = True
+                                
+                                # Get user name safely
+                                try:
+                                    user_name = get_user_name_func(
+                                        user.get('type_utilisateur', ''),
+                                        user.get('id_professeur'),
+                                        user.get('id_etudiant')
+                                    )
+                                    st.session_state.user_name = user_name
+                                except Exception as e:
+                                    print(f"Warning: Could not get user name: {e}")
+                                    traceback.print_exc()
+                                    try:
+                                        st.session_state.user_name = user.get('email', 'Utilisateur')
+                                    except:
+                                        pass
+                                
+                                # Set query params safely
+                                try:
+                                    st.query_params["user_email"] = email
+                                except Exception as e:
+                                    print(f"Warning: Could not set query params: {e}")
+                                
+                                # Show success message safely
+                                try:
+                                    st.success("Connexion réussie !")
+                                except:
+                                    pass
+                                
+                                # Rerun safely - wrap in try-except
+                                try:
+                                    st.rerun()
+                                except Exception as e:
+                                    print(f"Warning: st.rerun() failed: {e}")
+                                    traceback.print_exc()
+                                    # If rerun fails, don't crash - just continue
+                                    # The page will refresh on next interaction
+                                    
+                            except Exception as e:
+                                # Critical: If session state setting fails, show error but don't crash
+                                error_msg = f"Erreur lors de l'initialisation de la session: {type(e).__name__}: {str(e)}"
+                                st.error(f"❌ {error_msg}")
+                                print(f"ERROR: Session initialization failed: {error_msg}")
+                                traceback.print_exc()
+                        else:
+                            # Login failed - show appropriate error
+                            try:
+                                if err:
+                                    # Check if it's a database connection error
+                                    err_lower = err.lower()
+                                    if any(keyword in err_lower for keyword in ["connection", "timeout", "database", "mysql", "erreur"]):
+                                        st.error(f"❌ {err}")
+                                        st.warning("💡 Vérifiez que:\n- Le serveur MySQL est démarré sur le port 3307\n- Les identifiants dans `.streamlit/secrets.toml` sont corrects\n- Le serveur est accessible depuis votre machine")
+                                    else:
+                                        st.error(err)
+                                else:
+                                    st.error("Erreur inconnue lors de la connexion")
+                            except Exception as e:
+                                # Even error display can fail - log it
+                                print(f"ERROR: Failed to display error message: {e}")
+                                st.error("Une erreur s'est produite. Consultez les logs du serveur.")
+                                
+                except Exception as e:
+                    # CRITICAL: This is the absolute last line of defense
+                    # If we reach here, something very unexpected happened
+                    error_msg = f"Erreur critique lors de la connexion: {type(e).__name__}: {str(e)}"
+                    print(f"CRITICAL ERROR in login handler: {error_msg}")
+                    traceback.print_exc()
+                    
+                    # Try to show error to user, but don't fail if this also fails
+                    try:
+                        st.error(f"❌ {error_msg}")
+                        st.warning("💡 Le serveur de base de données peut être inaccessible. Vérifiez votre configuration.")
+                    except Exception:
+                        # If even error display fails, just log it
+                        print("CRITICAL: Could not display error message to user")
         
         # --- RESCUE MODE: For when utilisateur table is empty ---
         st.divider()

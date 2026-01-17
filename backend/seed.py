@@ -21,6 +21,9 @@ ALG_LAST_NAMES = [
 
 def seed_database():
     conn = get_connection()
+    if conn is None:
+        return False, "Impossible de se connecter à la base de données. Vérifiez que MySQL est démarré et que les paramètres de connexion sont corrects."
+    
     cursor = conn.cursor(buffered=True)
     
     try:
