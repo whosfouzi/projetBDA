@@ -59,5 +59,18 @@ streamlit run app.py
 - **Professors**: `bouchenak_0@univ.edu` / `password123`
 - **Students**: `e202400074@student.edu` / `password123`
 
+## 🚀 Deployment
+
+Ready to deploy your exam scheduler to production?
+
+**📖 See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions.**
+
+Quick checklist:
+- ✅ Railway MySQL database configured
+- ✅ Database initialized with seed data (`python3 -m backend.seed`)
+- ✅ Choose deployment platform (Streamlit Cloud or Railway)
+- ✅ Configure secrets/environment variables
+- ✅ Deploy and test!
+
 ---
 *Note: If your database is empty, you can use the "Mode Récupération" button on the Login page to seed 13,000 students and 1,000 professors automatically.*
