@@ -486,6 +486,11 @@ class GreedyScheduler:
         cursor = conn.cursor()
         
         try:
+            # 0. Increase lock wait timeout for this session to avoid cloud latency issues
+            cursor.execute("SET SESSION innodb_lock_wait_timeout = 180")
+            # Temporarily disable foreign key checks for bulk delete/insert operations
+            cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+            
             # 1. Clear Future Exams AND Cache Tables
             cursor.execute("DELETE FROM examen WHERE date_examen >= %s", (self.start_date,))
             cursor.execute("DELETE FROM etudiant_examens_jour WHERE date_examen >= %s", (self.start_date,))
@@ -623,5 +628,9 @@ class GreedyScheduler:
             conn.rollback()
             raise e
         finally:
+            try:
+                cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+            except:
+                pass
             cursor.close()
             conn.close()

@@ -34,6 +34,7 @@ def seed_database():
         ]
         
         # Disable foreign keys to allow dropping parents
+        cursor.execute("SET SESSION innodb_lock_wait_timeout = 300")
         cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t}")
