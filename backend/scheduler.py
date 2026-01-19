@@ -531,21 +531,21 @@ class GreedyScheduler:
                     cursor.executemany("INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle) VALUES (%s, %s, %s)", cache_capacite_data)
                 
                 # 6. EXTREME OPTIMIZATION: Move student tracking updates to SQL JOINs
+                # We use DISTINCT and GROUP BY to ensure each MODULE is only counted once per student per day,
+                # even if it is split across multiple rooms (multiple id_examen).
                 q_track_students = """
                 INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
-                SELECT s.id_etudiant, e.date_examen, 1, CAST(e.id_examen AS CHAR)
+                SELECT 
+                    s.id_etudiant, 
+                    e.date_examen, 
+                    COUNT(DISTINCT e.id_module), 
+                    GROUP_CONCAT(DISTINCT e.id_examen)
                 FROM examen e
                 JOIN exam_groupe_track gt ON e.id_examen = gt.id_examen
                 JOIN etudiant s ON gt.id_spec = s.id_spec AND gt.groupe_numero = s.groupe_numero
                 WHERE e.date_examen >= %s
-                ON DUPLICATE KEY UPDATE 
-                    nb_examens = nb_examens + 1,
-                    liste_examens = CONCAT(liste_examens, ',', EXCLUDED.liste_examens)
+                GROUP BY s.id_etudiant, e.date_examen
                 """
-                # Note: In MySQL 8.0.20+, use VALUES() or EXCLUDED depending on version. 
-                # On Railway/MySQL 8, VALUES(col) is common for legacy but EXCLUDED is better.
-                # Let's use legacy VALUES() as it's more portable across common MySQL installs.
-                q_track_students = q_track_students.replace("EXCLUDED.liste_examens", "VALUES(liste_examens)")
                 cursor.execute(q_track_students, (self.start_date,))
 
                 # B. Update Professor Tracking
