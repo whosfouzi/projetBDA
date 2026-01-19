@@ -20,6 +20,7 @@ class GreedyScheduler:
         self.student_daily_exams = {} # {student_id: {date_str: count}}
         self.room_schedule = {} # {room_id: {date_str: [(start_time, end_time)]}}
         self.prof_schedule = {} # {prof_id: {date_str: [(start_time, end_time)]}}
+        self.spec_daily_exams = {} # {spec_id: {date_str: count}}
         
         # Dynamic Constraints (loaded from DB)
         self.constraints = self.load_constraints()
@@ -118,26 +119,14 @@ class GreedyScheduler:
         return slots
 
     def check_student_conflict(self, module_id, date_str):
-        # Rule: Student max N exams per day (from config)
+        # Optimized: Modules belong to specs. If the spec already has an exam this day, 
+        # all students in that spec are effectively busy.
+        spec_id = next((m['id_spec'] for m in self.modules if m['id_module'] == module_id), None)
+        if not spec_id: return False
+        
         max_allowed = self.constraints['max_examens_etudiant_par_jour']
-        students_in_module = self.module_students.get(module_id, set())
-        
-        # DEBUG: Trace Spec 605
-        # We need to find spec id from module list or just check explicit students
-        # For performance, only trace if we suspect conflict ignored
-        
-        for sid in students_in_module:
-            load = self.student_daily_exams.get(sid, {}).get(date_str, 0)
-            if load >= max_allowed:
-                # print(f"CONFLICT: Mod {module_id}, Stud {sid}, Date {date_str}, Load {load} >= {max_allowed}")
-                return True # Conflict found
-            
-            # DEBUG: If load > 0 but < max, wait... max is 1. If load > 0, IT IS >= 1.
-            # So if we are here, load MUST be 0.
-            # if load > 0:
-            #    print(f"WEIRD: Mod {module_id}, Date {date_str}, Load {load} < {max_allowed}?")
-
-        return False
+        load = self.spec_daily_exams.get(spec_id, {}).get(date_str, 0)
+        return load >= max_allowed
 
     def check_room_availability(self, room_id, date_str, start_time, duration_mins=120):
         # Rule 5: Room Exclusivity
@@ -321,35 +310,10 @@ class GreedyScheduler:
         full_dt = datetime.combine(datetime.today(), t_start) + timedelta(minutes=duration)
         end_time = full_dt.time()
         
-        # Update Student Load (Preliminary) - Once per module, not per room chunk
-        students = self.module_students.get(mid, set())
-        for sid in students:
-            if sid not in self.student_daily_exams: self.student_daily_exams[sid] = {}
-            # We add 1 to the load. 
-            # CAUTION: If we already added this module to this day (unlikely in greedy pass 1), don't double count.
-            # Dict .get() handles fresh addition.
-            # But wait, we are splitting one module into multiple entries.
-            # We should only increment student load ONCE.
-            # The current logic loops rooms. We must do student load UPDATE outside the room loop.
-            pass
-            
-        # Actually, let's update student load here for the WHOLE module assignment
-        if not students:
-            print(f"CRITICAL WARNING: Module {mid} has 0 mapped students! Logic will skip load update.")
-        
-        for sid in students:
-             if sid not in self.student_daily_exams: self.student_daily_exams[sid] = {}
-             
-             current_load = self.student_daily_exams[sid].get(date_str, 0)
-             if current_load >= self.constraints['max_examens_etudiant_par_jour']:
-                 print(f"FATAL: Attempting to schedule Mod {mid} for Student {sid} on {date_str}. Current Load: {current_load}")
-                 raise ValueError(f"CRITICAL LOGIC FAILURE: Student {sid} already has {current_load} exams on {date_str}")
-             
-             # DEBUG: Verify we are actually updating
-             if current_load == 0:
-                 pass # print(f"DEBUG: Student {sid} load 0->1 on {date_str} for Mod {mid}")
-
-             self.student_daily_exams[sid][date_str] = current_load + 1
+        # Optimized Specialization-Level Tracking
+        spec_id = mod['id_spec']
+        if spec_id not in self.spec_daily_exams: self.spec_daily_exams[spec_id] = {}
+        self.spec_daily_exams[spec_id][date_str] = self.spec_daily_exams[spec_id].get(date_str, 0) + 1
 
         # Now handle the split across rooms based on our specific Allocation Plan
         # rooms is now [{'room': r, 'count': c}, ...]
@@ -554,49 +518,30 @@ class GreedyScheduler:
                     room_cap = next((r['capacite'] for r in self.rooms if r['id_salle'] == item['id_salle']), 0)
                     cache_capacite_data.append((exam_id, nb_students, room_cap))
                     
-                    # Student exams tracking
-                    mid = item['id_module']
-                    edate = item['date_examen']
-                    students = self.module_students.get(mid, set())
-                    
-                    for sid in students:
-                        if (sid, edate, mid) not in recorded_student_exams:
-                            key = (sid, edate)
-                            if key not in student_exam_updates:
-                                student_exam_updates[key] = set()
-                            student_exam_updates[key].add(exam_id)
-                            recorded_student_exams.add((sid, edate, mid))
-                    
-                    # Professor surveillance tracking
-                    prof_key = (item['id_professeur'], edate)
-                    prof_surveillance_updates[prof_key] = prof_surveillance_updates.get(prof_key, 0) + 1
+                    if cache_capacite_data:
+                        cursor.executemany("INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle) VALUES (%s, %s, %s)", cache_capacite_data)
                 
-                # 5. Batch insert related tables
-                if surveillance_data:
-                    cursor.executemany("INSERT INTO surveillance (id_professeur, id_examen, role) VALUES (%s, %s, %s)", surveillance_data)
+                # RECORDED REMOVED: self.module_students loop used previously is no longer needed in Python.
+                # It is now handled by the SQL JOIN in step 6.
                 
-                if group_track_data:
-                    cursor.executemany("INSERT INTO exam_groupe_track (id_examen, id_spec, groupe_numero, assigned_count) VALUES (%s, %s, %s, %s)", group_track_data)
+                # 6. EXTREME OPTIMIZATION: Move tracking updates to SQL JOINs
+                # This replaces 13,000+ Python loops with 2 high-performance SQL queries.
                 
-                if cache_capacite_data:
-                    cursor.executemany("INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle) VALUES (%s, %s, %s)", cache_capacite_data)
-                
-                # 6. Ultra-Optimized Batch Update for tracking tables
-                if student_exam_updates:
-                    student_batch = []
-                    for (sid, edate), exam_ids in student_exam_updates.items():
-                        exam_list = ','.join(str(eid) for eid in exam_ids)
-                        count = len(exam_ids)
-                        student_batch.append((sid, edate, count, exam_list, count, exam_list))
-                    
-                    cursor.executemany("""
-                        INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
-                        VALUES (%s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE 
-                        nb_examens = nb_examens + %s,
-                        liste_examens = CONCAT(liste_examens, ',', %s)
-                    """, student_batch)
-                
+                # A. Update Student Tracking using JOIN on exam_groupe_track
+                q_track_students = """
+                INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
+                SELECT s.id_etudiant, e.date_examen, 1, CAST(e.id_examen AS CHAR)
+                FROM examen e
+                JOIN exam_groupe_track gt ON e.id_examen = gt.id_examen
+                JOIN etudiant s ON gt.id_spec = s.id_spec AND gt.groupe_numero = s.groupe_numero
+                WHERE e.date_examen >= %s
+                ON DUPLICATE KEY UPDATE 
+                    nb_examens = nb_examens + 1,
+                    liste_examens = CONCAT(liste_examens, ',', VALUES(liste_examens))
+                """
+                cursor.execute(q_track_students, (self.start_date,))
+
+                # B. Update Professor Tracking using simple multi-insert
                 if prof_surveillance_updates:
                     prof_day_batch = []
                     for (pid, pdate), count in prof_surveillance_updates.items():
