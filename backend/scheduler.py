@@ -495,14 +495,12 @@ class GreedyScheduler:
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.executemany(q_exam, exam_data)
-                
-                # In MySQL, lastrowid after executemany (or multi-row insert) 
-                # returns the ID of the FIRST row inserted.
                 first_exam_id = cursor.lastrowid
                 
-                # 4. Prepare related data with exam IDs
+                # 4. Prepare dependent data
                 for idx, item in enumerate(self.final_schedule):
                     exam_id = first_exam_id + idx
+                    item_date = item['date_examen']
                     
                     # Surveillance
                     surveillance_data.append((item['id_professeur'], exam_id, 'principal'))
@@ -518,16 +516,21 @@ class GreedyScheduler:
                     room_cap = next((r['capacite'] for r in self.rooms if r['id_salle'] == item['id_salle']), 0)
                     cache_capacite_data.append((exam_id, nb_students, room_cap))
                     
-                    if cache_capacite_data:
-                        cursor.executemany("INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle) VALUES (%s, %s, %s)", cache_capacite_data)
+                    # Professor daily load update
+                    prof_key = (item['id_professeur'], item_date)
+                    prof_surveillance_updates[prof_key] = prof_surveillance_updates.get(prof_key, 0) + 1
+
+                # 5. Batch insert dependent tables (OUTSIDE LOOP)
+                if surveillance_data:
+                    cursor.executemany("INSERT INTO surveillance (id_professeur, id_examen, role) VALUES (%s, %s, %s)", surveillance_data)
                 
-                # RECORDED REMOVED: self.module_students loop used previously is no longer needed in Python.
-                # It is now handled by the SQL JOIN in step 6.
+                if group_track_data:
+                    cursor.executemany("INSERT INTO exam_groupe_track (id_examen, id_spec, groupe_numero, assigned_count) VALUES (%s, %s, %s, %s)", group_track_data)
                 
-                # 6. EXTREME OPTIMIZATION: Move tracking updates to SQL JOINs
-                # This replaces 13,000+ Python loops with 2 high-performance SQL queries.
+                if cache_capacite_data:
+                    cursor.executemany("INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle) VALUES (%s, %s, %s)", cache_capacite_data)
                 
-                # A. Update Student Tracking using JOIN on exam_groupe_track
+                # 6. EXTREME OPTIMIZATION: Move student tracking updates to SQL JOINs
                 q_track_students = """
                 INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
                 SELECT s.id_etudiant, e.date_examen, 1, CAST(e.id_examen AS CHAR)
@@ -537,11 +540,15 @@ class GreedyScheduler:
                 WHERE e.date_examen >= %s
                 ON DUPLICATE KEY UPDATE 
                     nb_examens = nb_examens + 1,
-                    liste_examens = CONCAT(liste_examens, ',', VALUES(liste_examens))
+                    liste_examens = CONCAT(liste_examens, ',', EXCLUDED.liste_examens)
                 """
+                # Note: In MySQL 8.0.20+, use VALUES() or EXCLUDED depending on version. 
+                # On Railway/MySQL 8, VALUES(col) is common for legacy but EXCLUDED is better.
+                # Let's use legacy VALUES() as it's more portable across common MySQL installs.
+                q_track_students = q_track_students.replace("EXCLUDED.liste_examens", "VALUES(liste_examens)")
                 cursor.execute(q_track_students, (self.start_date,))
 
-                # B. Update Professor Tracking using simple multi-insert
+                # B. Update Professor Tracking
                 if prof_surveillance_updates:
                     prof_day_batch = []
                     for (pid, pdate), count in prof_surveillance_updates.items():
