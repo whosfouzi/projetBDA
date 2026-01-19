@@ -498,94 +498,122 @@ class GreedyScheduler:
             # Reset professor totals (they'll be recalculated)
             cursor.execute("UPDATE professeur SET total_surveillances = 0")
             
-            # 2. Insert New Schedule
-            # To avoid double-counting students in cache tables for split modules,
-            # we track which (student, date, module) triplets have been recorded.
-            recorded_student_exams = set() # {(sid, date, mid)}
+            # 2. Prepare batch data for insertion
+            exam_data = []
+            surveillance_data = []
+            group_track_data = []
+            cache_capacite_data = []
+            student_exam_updates = {}  # {(sid, date): set(exam_ids)}
+            prof_surveillance_updates = {}  # {(pid, date): count}
+            recorded_student_exams = set()
             
+            # Collect all data first
             for item in self.final_schedule:
-                # Insert Examen
-                q_exam = """
-                INSERT INTO examen (id_module, id_professeur, id_salle, date_examen, heure_debut, duree_minutes, annee_univ)
-                VALUES (%s, %s, %s, %s, %s, %s, '2024-2025')
-                """
-                cursor.execute(q_exam, (
+                exam_data.append((
                     item['id_module'],
                     item['id_professeur'],
                     item['id_salle'],
                     item['date_examen'],
                     item['heure_debut'],
-                    item['duree']
+                    item['duree'],
+                    '2024-2025'
                 ))
-                exam_id = cursor.lastrowid
-                
-                # Insert Surveillance (Principal)
-                q_surv = """
-                INSERT INTO surveillance (id_professeur, id_examen, role)
-                VALUES (%s, %s, 'principal')
-                """
-                cursor.execute(q_surv, (item['id_professeur'], exam_id))
-
-                # Insert Exam Group Tracking
-                # item['groups'] = [{'gid': 1, 'count': 35}, ...]
-                # We need id_spec from module
-                spec_id_for_track = item['id_module'] # Wait, module has id_spec but we need to fetch it from self.modules logic or query
-                # item['id_module'] is just INT. 
-                # We can get id_spec from self.modules lookup, but quicker to trust item structure if we have mod object
-                # item in final_schedule only has IDs. 
-                # Optimization: We can fetch spec_id from DB or memory. Memory:
-                spec_id_val = next((m['id_spec'] for m in self.modules if m['id_module'] == item['id_module']), None)
-
-                if spec_id_val and 'groups' in item:
-                    for g in item['groups']:
-                        # g is {'gid': X, 'count': Y}
-                        cursor.execute("""
-                            INSERT INTO exam_groupe_track (id_examen, id_spec, groupe_numero, assigned_count)
-                            VALUES (%s, %s, %s, %s)
-                        """, (exam_id, spec_id_val, g['gid'], g['count']))
-
-                # --- CACHE TABLES POPULATION ---
-                
-                # 1. cache_capacite_examens
-                nb_students_in_this_room = item.get('nb_students_assigned', 0)
-                room_cap = next((r['capacite'] for r in self.rooms if r['id_salle'] == item['id_salle']), 0)
-                
-                cursor.execute("""
-                    INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle)
-                    VALUES (%s, %s, %s)
-                """, (exam_id, nb_students_in_this_room, room_cap))
-                
-                # 2. etudiant_examens_jour
-                mid = item['id_module']
-                edate = item['date_examen']
-                students = self.module_students.get(mid, set())
-                
-                for sid in students:
-                    if (sid, edate, mid) not in recorded_student_exams:
-                        cursor.execute("""
-                            INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
-                            VALUES (%s, %s, 1, %s)
-                            ON DUPLICATE KEY UPDATE 
-                            nb_examens = nb_examens + 1,
-                            liste_examens = CONCAT(liste_examens, ',', %s)
-                        """, (sid, edate, str(exam_id), str(exam_id)))
-                        recorded_student_exams.add((sid, edate, mid))
-
-                # 3. suivi_surveillances_jour
-                cursor.execute("""
-                    INSERT INTO suivi_surveillances_jour (id_professeur, date_surveillance, nombre_surveillances)
-                    VALUES (%s, %s, 1)
-                    ON DUPLICATE KEY UPDATE
-                    nombre_surveillances = nombre_surveillances + 1
-                """, (item['id_professeur'], item['date_examen']))
             
-            # Update professeur.total_surveillances for all assigned professors
-            for pid, count in self.prof_total_load.items():
-                cursor.execute("""
+            # 3. Batch insert exams
+            if exam_data:
+                q_exam = """
+                INSERT INTO examen (id_module, id_professeur, id_salle, date_examen, heure_debut, duree_minutes, annee_univ)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.executemany(q_exam, exam_data)
+                
+                # In MySQL, lastrowid after executemany (or multi-row insert) 
+                # returns the ID of the FIRST row inserted.
+                first_exam_id = cursor.lastrowid
+                
+                # 4. Prepare related data with exam IDs
+                for idx, item in enumerate(self.final_schedule):
+                    exam_id = first_exam_id + idx
+                    
+                    # Surveillance
+                    surveillance_data.append((item['id_professeur'], exam_id, 'principal'))
+                    
+                    # Group tracking
+                    spec_id_val = next((m['id_spec'] for m in self.modules if m['id_module'] == item['id_module']), None)
+                    if spec_id_val and 'groups' in item:
+                        for g in item['groups']:
+                            group_track_data.append((exam_id, spec_id_val, g['gid'], g['count']))
+                    
+                    # Cache capacite
+                    nb_students = item.get('nb_students_assigned', 0)
+                    room_cap = next((r['capacite'] for r in self.rooms if r['id_salle'] == item['id_salle']), 0)
+                    cache_capacite_data.append((exam_id, nb_students, room_cap))
+                    
+                    # Student exams tracking
+                    mid = item['id_module']
+                    edate = item['date_examen']
+                    students = self.module_students.get(mid, set())
+                    
+                    for sid in students:
+                        if (sid, edate, mid) not in recorded_student_exams:
+                            key = (sid, edate)
+                            if key not in student_exam_updates:
+                                student_exam_updates[key] = set()
+                            student_exam_updates[key].add(exam_id)
+                            recorded_student_exams.add((sid, edate, mid))
+                    
+                    # Professor surveillance tracking
+                    prof_key = (item['id_professeur'], edate)
+                    prof_surveillance_updates[prof_key] = prof_surveillance_updates.get(prof_key, 0) + 1
+                
+                # 5. Batch insert related tables
+                if surveillance_data:
+                    cursor.executemany("INSERT INTO surveillance (id_professeur, id_examen, role) VALUES (%s, %s, %s)", surveillance_data)
+                
+                if group_track_data:
+                    cursor.executemany("INSERT INTO exam_groupe_track (id_examen, id_spec, groupe_numero, assigned_count) VALUES (%s, %s, %s, %s)", group_track_data)
+                
+                if cache_capacite_data:
+                    cursor.executemany("INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle) VALUES (%s, %s, %s)", cache_capacite_data)
+                
+                # 6. Ultra-Optimized Batch Update for tracking tables
+                if student_exam_updates:
+                    student_batch = []
+                    for (sid, edate), exam_ids in student_exam_updates.items():
+                        exam_list = ','.join(str(eid) for eid in exam_ids)
+                        count = len(exam_ids)
+                        student_batch.append((sid, edate, count, exam_list, count, exam_list))
+                    
+                    cursor.executemany("""
+                        INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
+                        VALUES (%s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE 
+                        nb_examens = nb_examens + %s,
+                        liste_examens = CONCAT(liste_examens, ',', %s)
+                    """, student_batch)
+                
+                if prof_surveillance_updates:
+                    prof_day_batch = []
+                    for (pid, pdate), count in prof_surveillance_updates.items():
+                        prof_day_batch.append((pid, pdate, count, count))
+                    
+                    cursor.executemany("""
+                        INSERT INTO suivi_surveillances_jour (id_professeur, date_surveillance, nombre_surveillances)
+                        VALUES (%s, %s, %s)
+                        ON DUPLICATE KEY UPDATE nombre_surveillances = nombre_surveillances + %s
+                    """, prof_day_batch)
+            
+            # 7. Final Batch Update for Professor Totals
+            if self.prof_total_load:
+                prof_total_batch = []
+                for pid, count in self.prof_total_load.items():
+                    prof_total_batch.append((count, pid))
+                
+                cursor.executemany("""
                     UPDATE professeur 
                     SET total_surveillances = total_surveillances + %s
                     WHERE id_professeur = %s
-                """, (count, pid))
+                """, prof_total_batch)
             
             conn.commit()
             return {
