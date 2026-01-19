@@ -485,13 +485,18 @@ class GreedyScheduler:
         cursor = conn.cursor()
         
         try:
+            # 0. Increase lock wait timeout for this session to avoid cloud latency issues
+            cursor.execute("SET SESSION innodb_lock_wait_timeout = 180")
+            # Temporarily disable foreign key checks for bulk delete/insert operations
+            cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+
             # 1. Clear Future Exams AND Cache Tables
             # Start date usually implies "current session", so we wipe from start_date onwards
             cursor.execute("DELETE FROM examen WHERE date_examen >= %s", (self.start_date,))
             
-            # Clear cache tables for the same date range to prevent accumulation
-            cursor.execute("DELETE FROM exam_groupe_track WHERE id_examen IN (SELECT id_examen FROM examen WHERE date_examen >= %s)", (self.start_date,))
-            cursor.execute("DELETE FROM cache_capacite_examens WHERE id_examen IN (SELECT id_examen FROM examen WHERE date_examen >= %s)", (self.start_date,))
+            # Clear cache tables (since they depend on examen IDs)
+            cursor.execute("DELETE FROM exam_groupe_track WHERE id_examen NOT IN (SELECT id_examen FROM examen)")
+            cursor.execute("DELETE FROM cache_capacite_examens WHERE id_examen NOT IN (SELECT id_examen FROM examen)")
             cursor.execute("DELETE FROM etudiant_examens_jour WHERE date_examen >= %s", (self.start_date,))
             cursor.execute("DELETE FROM suivi_surveillances_jour WHERE date_surveillance >= %s", (self.start_date,))
             
@@ -625,5 +630,9 @@ class GreedyScheduler:
             conn.rollback()
             raise e
         finally:
+            try:
+                cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+            except:
+                pass
             cursor.close()
             conn.close()
