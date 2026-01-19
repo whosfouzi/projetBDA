@@ -106,7 +106,15 @@ def show_timetable():
     # Effective Capacity logic for Admin
     res_limit = run_query("SELECT valeur FROM configuration_contraintes WHERE nom = 'max_etudiants_par_salle'")
     global_limit = res_limit[0]['valeur'] if res_limit else 20
-    df_exams['Capacité'] = df_exams.apply(lambda x: f"{int(x['Occupied'])} / {min(int(x['TotalCap'] if 'TotalCap' in x else 0), global_limit)}", axis=1)
+    
+    # Fill NaNs specifically for columns used in calculations
+    df_exams['Occupied'] = df_exams['Occupied'].fillna(0)
+    df_exams['TotalCap'] = df_exams['TotalCap'].fillna(0)
+    
+    df_exams['Capacité'] = df_exams.apply(
+        lambda x: f"{int(x['Occupied'])} / {min(int(x['TotalCap']), global_limit)}", 
+        axis=1
+    )
 
     # Selectbox by Speciality
     all_s_names = sorted(df_counts['Specialite'].unique())
