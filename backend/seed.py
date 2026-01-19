@@ -27,13 +27,14 @@ def seed_database():
         # 1. Clean Data & Rebuild Schema
         # We drop everything to ensure clean state, then recreate strict schema.
         tables = [
-            'cache_capacite_examens', 'etudiant_examens_jour', 'suivi_surveillances_jour', 'exam_groupe_track',
+            'validation_edt', 'cache_capacite_examens', 'etudiant_examens_jour', 'suivi_surveillances_jour', 'exam_groupe_track',
             'surveillance', 'inscription', 'examen', 'module', 
             'utilisateur', 'etudiant', 'groupe', 'professeur', 'specialite', 'annee_etude',
             'departement', 'salle', 'batiment', 'faculte', 'configuration_contraintes'
         ]
         
-        # Disable foreign keys to allow dropping parents
+        # Increase timeout and disable foreign keys for a clean wipe
+        cursor.execute("SET SESSION innodb_lock_wait_timeout = 300")
         cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
         for t in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {t}")
