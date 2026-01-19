@@ -44,3 +44,9 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Database & Backups
+*.sql
+*.bak
+*.dump
+*.log
