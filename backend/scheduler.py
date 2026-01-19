@@ -552,12 +552,13 @@ class GreedyScheduler:
                 if prof_surveillance_updates:
                     prof_day_batch = []
                     for (pid, pdate), count in prof_surveillance_updates.items():
-                        prof_day_batch.append((pid, pdate, count, count))
+                        # Only 3 parameters needed because we use VALUES() in the update clause
+                        prof_day_batch.append((pid, pdate, count))
                     
                     cursor.executemany("""
                         INSERT INTO suivi_surveillances_jour (id_professeur, date_surveillance, nombre_surveillances)
                         VALUES (%s, %s, %s)
-                        ON DUPLICATE KEY UPDATE nombre_surveillances = nombre_surveillances + %s
+                        ON DUPLICATE KEY UPDATE nombre_surveillances = nombre_surveillances + VALUES(nombre_surveillances)
                     """, prof_day_batch)
             
             # 7. Final Batch Update for Professor Totals
