@@ -1,17 +1,21 @@
 import mysql.connector
 import streamlit as st
+import os
 
 def get_connection():
-    # Add connection pooling for better performance with cloud databases
+    # Use Railway internal variables if available, otherwise fallback to Streamlit secrets
+    host = os.getenv("MYSQLHOST") or st.secrets["mysql"]["host"]
+    port = int(os.getenv("MYSQLPORT") or st.secrets["mysql"]["port"])
+    user = os.getenv("MYSQLUSER") or st.secrets["mysql"]["user"]
+    password = os.getenv("MYSQLPASSWORD") or st.secrets["mysql"]["password"]
+    database = os.getenv("MYSQLDATABASE") or st.secrets["mysql"]["database"]
+
     return mysql.connector.connect(
-        host=st.secrets["mysql"]["host"],
-        port=st.secrets["mysql"]["port"],
-        user=st.secrets ["mysql"]["user"],
-        password=st.secrets["mysql"]["password"],
-        database=st.secrets["mysql"]["database"],
-        pool_size=5,  # Connection pool for reuse
-        pool_name="exam_scheduler_pool",
-        pool_reset_session=True
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database
     )
 
 def run_query(query, params=None):
@@ -22,6 +26,7 @@ def run_query(query, params=None):
         cursor.execute(query, params)
         q = query.strip().upper()
         if q.startswith("SELECT") or q.startswith("SHOW") or q.startswith("DESC"):
+            # Ensure we fetch ALL rows (critical for 13k students)
             return cursor.fetchall()
         else:
             conn.commit()
@@ -32,7 +37,6 @@ def run_query(query, params=None):
     finally:
         cursor.close()
         conn.close()
-
 def run_batch_insert(query, data_list):
     """Execute batch insert for better performance with multiple rows."""
     if not data_list:

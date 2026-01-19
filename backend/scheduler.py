@@ -481,144 +481,113 @@ class GreedyScheduler:
         })
 
     def save(self):
-        from backend.db import run_batch_insert
         conn = get_connection()
         cursor = conn.cursor()
         
         try:
-            # 0. Increase lock wait timeout for this session to avoid cloud latency issues
-            cursor.execute("SET SESSION innodb_lock_wait_timeout = 180")
-            # Temporarily disable foreign key checks for bulk delete/insert operations
-            cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
-            
             # 1. Clear Future Exams AND Cache Tables
+            # Start date usually implies "current session", so we wipe from start_date onwards
             cursor.execute("DELETE FROM examen WHERE date_examen >= %s", (self.start_date,))
+            
+            # Clear cache tables for the same date range to prevent accumulation
+            cursor.execute("DELETE FROM exam_groupe_track WHERE id_examen IN (SELECT id_examen FROM examen WHERE date_examen >= %s)", (self.start_date,))
+            cursor.execute("DELETE FROM cache_capacite_examens WHERE id_examen IN (SELECT id_examen FROM examen WHERE date_examen >= %s)", (self.start_date,))
             cursor.execute("DELETE FROM etudiant_examens_jour WHERE date_examen >= %s", (self.start_date,))
             cursor.execute("DELETE FROM suivi_surveillances_jour WHERE date_surveillance >= %s", (self.start_date,))
+            
+            # Reset professor totals (they'll be recalculated)
             cursor.execute("UPDATE professeur SET total_surveillances = 0")
-            conn.commit()
             
-            # 2. Prepare batch data for insertion
-            exam_data = []
-            surveillance_data = []
-            group_track_data = []
-            cache_capacite_data = []
-            student_exam_updates = {}  # {(sid, date): set(exam_ids)}
-            prof_surveillance_updates = {}  # {(pid, date): count}
-            recorded_student_exams = set()
+            # 2. Insert New Schedule
+            # To avoid double-counting students in cache tables for split modules,
+            # we track which (student, date, module) triplets have been recorded.
+            recorded_student_exams = set() # {(sid, date, mid)}
             
-            # Collect all data first
             for item in self.final_schedule:
-                exam_data.append((
+                # Insert Examen
+                q_exam = """
+                INSERT INTO examen (id_module, id_professeur, id_salle, date_examen, heure_debut, duree_minutes, annee_univ)
+                VALUES (%s, %s, %s, %s, %s, %s, '2024-2025')
+                """
+                cursor.execute(q_exam, (
                     item['id_module'],
                     item['id_professeur'],
                     item['id_salle'],
                     item['date_examen'],
                     item['heure_debut'],
-                    item['duree'],
-                    '2024-2025'
+                    item['duree']
                 ))
-            
-            # 3. Batch insert exams (single round trip!)
-            if exam_data:
-                q_exam = """
-                INSERT INTO examen (id_module, id_professeur, id_salle, date_examen, heure_debut, duree_minutes, annee_univ)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                exam_id = cursor.lastrowid
+                
+                # Insert Surveillance (Principal)
+                q_surv = """
+                INSERT INTO surveillance (id_professeur, id_examen, role)
+                VALUES (%s, %s, 'principal')
                 """
-                cursor.executemany(q_exam, exam_data)
-                conn.commit()
+                cursor.execute(q_surv, (item['id_professeur'], exam_id))
+
+                # Insert Exam Group Tracking
+                # item['groups'] = [{'gid': 1, 'count': 35}, ...]
+                # We need id_spec from module
+                spec_id_for_track = item['id_module'] # Wait, module has id_spec but we need to fetch it from self.modules logic or query
+                # item['id_module'] is just INT. 
+                # We can get id_spec from self.modules lookup, but quicker to trust item structure if we have mod object
+                # item in final_schedule only has IDs. 
+                # Optimization: We can fetch spec_id from DB or memory. Memory:
+                spec_id_val = next((m['id_spec'] for m in self.modules if m['id_module'] == item['id_module']), None)
+
+                if spec_id_val and 'groups' in item:
+                    for g in item['groups']:
+                        # g is {'gid': X, 'count': Y}
+                        cursor.execute("""
+                            INSERT INTO exam_groupe_track (id_examen, id_spec, groupe_numero, assigned_count)
+                            VALUES (%s, %s, %s, %s)
+                        """, (exam_id, spec_id_val, g['gid'], g['count']))
+
+                # --- CACHE TABLES POPULATION ---
                 
-                # Get the starting exam_id (last inserted ID - count + 1)
-                last_id = cursor.lastrowid
-                first_exam_id = last_id - len(exam_data) + 1
+                # 1. cache_capacite_examens
+                nb_students_in_this_room = item.get('nb_students_assigned', 0)
+                room_cap = next((r['capacite'] for r in self.rooms if r['id_salle'] == item['id_salle']), 0)
                 
-                # 4. Now prepare related data with exam IDs
-                for idx, item in enumerate(self.final_schedule):
-                    exam_id = first_exam_id + idx
-                    
-                    # Surveillance
-                    surveillance_data.append((item['id_professeur'], exam_id, 'principal'))
-                    
-                    # Group tracking
-                    spec_id_val = next((m['id_spec'] for m in self.modules if m['id_module'] == item['id_module']), None)
-                    if spec_id_val and 'groups' in item:
-                        for g in item['groups']:
-                            group_track_data.append((exam_id, spec_id_val, g['gid'], g['count']))
-                    
-                    # Cache capacite
-                    nb_students = item.get('nb_students_assigned', 0)
-                    room_cap = next((r['capacite'] for r in self.rooms if r['id_salle'] == item['id_salle']), 0)
-                    cache_capacite_data.append((exam_id, nb_students, room_cap))
-                    
-                    # Student exams tracking
-                    mid = item['id_module']
-                    edate = item['date_examen']
-                    students = self.module_students.get(mid, set())
-                    
-                    for sid in students:
-                        if (sid, edate, mid) not in recorded_student_exams:
-                            key = (sid, edate)
-                            if key not in student_exam_updates:
-                                student_exam_updates[key] = set()
-                            student_exam_updates[key].add(exam_id)
-                            recorded_student_exams.add((sid, edate, mid))
-                    
-                    # Professor surveillance tracking
-                    prof_key = (item['id_professeur'], edate)
-                    prof_surveillance_updates[prof_key] = prof_surveillance_updates.get(prof_key, 0) + 1
-                
-                # 5. Batch insert surveillance
-                if surveillance_data:
-                    q_surv = "INSERT INTO surveillance (id_professeur, id_examen, role) VALUES (%s, %s, %s)"
-                    cursor.executemany(q_surv, surveillance_data)
-                
-                # 6. Batch insert group tracking
-                if group_track_data:
-                    q_group = """
-                    INSERT INTO exam_groupe_track (id_examen, id_spec, groupe_numero, assigned_count)
-                    VALUES (%s, %s, %s, %s)
-                    """
-                    cursor.executemany(q_group, group_track_data)
-                
-                # 7. Batch insert cache capacite
-                if cache_capacite_data:
-                    q_cache = """
+                cursor.execute("""
                     INSERT INTO cache_capacite_examens (id_examen, nb_etudiants_inscrits, capacite_salle)
                     VALUES (%s, %s, %s)
-                    """
-                    cursor.executemany(q_cache, cache_capacite_data)
+                """, (exam_id, nb_students_in_this_room, room_cap))
                 
-                # 8. Student exams jour (with ON DUPLICATE KEY UPDATE)
-                for (sid, edate), exam_ids in student_exam_updates.items():
-                    exam_list = ','.join(str(eid) for eid in exam_ids)
-                    cursor.execute("""
-                        INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
-                        VALUES (%s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE 
-                        nb_examens = nb_examens + %s,
-                        liste_examens = CONCAT(liste_examens, ',', %s)
-                    """, (sid, edate, len(exam_ids), exam_list, len(exam_ids), exam_list))
+                # 2. etudiant_examens_jour
+                mid = item['id_module']
+                edate = item['date_examen']
+                students = self.module_students.get(mid, set())
                 
-                # 9. Professor surveillance jour
-                for (pid, pdate), count in prof_surveillance_updates.items():
-                    cursor.execute("""
-                        INSERT INTO suivi_surveillances_jour (id_professeur, date_surveillance, nombre_surveillances)
-                        VALUES (%s, %s, %s)
-                        ON DUPLICATE KEY UPDATE
-                        nombre_surveillances = nombre_surveillances + %s
-                    """, (pid, pdate, count, count))
-                
-                # 10. Update professor totals
-                for pid, count in self.prof_total_load.items():
-                    if count > 0:
+                for sid in students:
+                    if (sid, edate, mid) not in recorded_student_exams:
                         cursor.execute("""
-                            UPDATE professeur 
-                            SET total_surveillances = total_surveillances + %s
-                            WHERE id_professeur = %s
-                        """, (count, pid))
-                
-                conn.commit()
+                            INSERT INTO etudiant_examens_jour (id_etudiant, date_examen, nb_examens, liste_examens)
+                            VALUES (%s, %s, 1, %s)
+                            ON DUPLICATE KEY UPDATE 
+                            nb_examens = nb_examens + 1,
+                            liste_examens = CONCAT(liste_examens, ',', %s)
+                        """, (sid, edate, str(exam_id), str(exam_id)))
+                        recorded_student_exams.add((sid, edate, mid))
+
+                # 3. suivi_surveillances_jour
+                cursor.execute("""
+                    INSERT INTO suivi_surveillances_jour (id_professeur, date_surveillance, nombre_surveillances)
+                    VALUES (%s, %s, 1)
+                    ON DUPLICATE KEY UPDATE
+                    nombre_surveillances = nombre_surveillances + 1
+                """, (item['id_professeur'], item['date_examen']))
             
+            # Update professeur.total_surveillances for all assigned professors
+            for pid, count in self.prof_total_load.items():
+                cursor.execute("""
+                    UPDATE professeur 
+                    SET total_surveillances = total_surveillances + %s
+                    WHERE id_professeur = %s
+                """, (count, pid))
+            
+            conn.commit()
             return {
                 "assigned": len(self.final_schedule),
                 "unscheduled": self.unscheduled,
@@ -628,9 +597,5 @@ class GreedyScheduler:
             conn.rollback()
             raise e
         finally:
-            try:
-                cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
-            except:
-                pass
             cursor.close()
             conn.close()
